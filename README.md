@@ -119,11 +119,19 @@ config.docker.toml
 Copy-Item .env.example .env
 ```
 
-启动 Docker Desktop 后运行：
+启动 Docker Desktop 后，如果想在 Containers 页面看到一个常驻容器，运行：
 
 ```powershell
-& 'C:\Program Files\Docker\Docker\resources\bin\docker.exe' compose up --build ingest
+& 'C:\Program Files\Docker\Docker\resources\bin\docker.exe' compose up -d --build console
 ```
+
+只做一次性检查或批处理时，运行：
+
+```powershell
+& 'C:\Program Files\Docker\Docker\resources\bin\docker.exe' compose run --rm ingest doctor --config /app/config.docker.toml
+```
+
+`compose run --rm` 会在命令结束后删除临时容器，所以它不会长期显示在 Docker Desktop 的 Containers 页面。
 
 默认镜像不安装 Whisper，避免第一次构建过大。需要容器内转写时，把 `.env` 里的 `INSTALL_WHISPER=false` 改成：
 
