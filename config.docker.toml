@@ -1,0 +1,39 @@
+[paths]
+queue_db = "/app/data/queue.sqlite"
+cache_dir = "/app/cache"
+
+[obsidian]
+mode = "local"
+vault_path = "/vault"
+folder = "Inbox/Learning Inbox"
+rest_base_url = "http://127.0.0.1:27123"
+rest_api_key = ""
+
+[tools]
+yt_dlp = "yt-dlp"
+ffmpeg = "ffmpeg"
+douyin_downloader = "douyin-dl"
+douyin_config = "/app/douyin-config.yml"
+whisper = "whisper"
+funasr = "funasr"
+
+[llm]
+enabled = true
+provider = "openai-compatible"
+base_url = "https://api.deepseek.com"
+api_key = ""
+model = "deepseek-v4-pro"
+language = "zh-CN"
+
+[routing]
+enabled = true
+fallback_folder = "Inbox/Learning Inbox"
+allowed_folders = [
+  "AI学习",
+  "考研资料汇总",
+  "英语学习",
+  "工作",
+  "Life",
+  "毕业前的30件事",
+  "Inbox/Learning Inbox",
+]

@@ -1,0 +1,3 @@
+这是 Obsidian Ingest 真实库写入验证。
+当前输出路径已经切到 D:/obsidian资料汇总/HYL。
+这条内容用于确认本地文本可以沉淀为 Obsidian Markdown。

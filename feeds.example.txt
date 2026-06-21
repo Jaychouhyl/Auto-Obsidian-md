@@ -1,0 +1,2 @@
+# 每行一个 RSS 或 Atom feed 地址
+# https://example.com/feed.xml

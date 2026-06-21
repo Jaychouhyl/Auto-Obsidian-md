@@ -1,0 +1,39 @@
+[paths]
+queue_db = "D:/obsidian-ingest-pipeline/data/queue.sqlite"
+cache_dir = "D:/obsidian-ingest-pipeline/cache"
+
+[obsidian]
+mode = "local"
+vault_path = "D:/ObsidianVault"
+folder = "Inbox/Learning Inbox"
+rest_base_url = "http://127.0.0.1:27123"
+rest_api_key = ""
+
+[tools]
+yt_dlp = "yt-dlp"
+ffmpeg = "ffmpeg"
+douyin_downloader = "douyin-downloader"
+douyin_config = ""
+whisper = "whisper"
+funasr = "funasr"
+
+[llm]
+enabled = false
+provider = "openai-compatible"
+base_url = "https://api.openai.com/v1"
+api_key = ""
+model = "gpt-4o-mini"
+language = "zh-CN"
+
+[routing]
+enabled = true
+fallback_folder = "Inbox/Learning Inbox"
+allowed_folders = [
+    "AI学习",
+    "考研资料汇总",
+    "英语学习",
+    "工作",
+    "Life",
+    "毕业前的30件事",
+    "Inbox/Learning Inbox",
+]

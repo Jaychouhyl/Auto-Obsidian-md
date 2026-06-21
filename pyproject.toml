@@ -1,0 +1,15 @@
+[project]
+name = "obsidian-ingest-pipeline"
+version = "0.1.0"
+description = "Local-first pipeline from learning links to Obsidian Markdown notes"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+obsidian-ingest = "obsidian_ingest.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

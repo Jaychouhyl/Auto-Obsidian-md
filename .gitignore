@@ -1,0 +1,61 @@
+# Hidden local folders
+.*
+!.gitignore
+!.dockerignore
+!.env.example
+!.github/
+!.github/**
+
+# Local configuration and secrets
+config.toml
+douyin-config.yml
+.env
+.env.*
+!.env.example
+*.local.toml
+links.txt
+feeds.txt
+
+# Runtime data
+data/
+cache/
+logs/
+inbox/
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Generated local helpers
+启动 Obsidian Ingest Studio.cmd
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node / frontend
+desktop/node_modules/
+desktop/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Rust / Tauri build output
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+
+# Internal planning notes and local handoff docs
+docs/
+本机完成记录.md
+自动化使用说明.md
+下一步配置实操清单.md
+需要你补充的配置.md
+
+# Local samples generated during validation
+sample-vault/
+sample-inputs/*.wav

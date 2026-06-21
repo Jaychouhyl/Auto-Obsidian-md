@@ -1,0 +1,15 @@
+services:
+  ingest:
+    build:
+      context: .
+      args:
+        INSTALL_WHISPER: "${INSTALL_WHISPER:-false}"
+    image: auto-obsidian-md:local
+    working_dir: /app
+    environment:
+      DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
+      OBSIDIAN_INGEST_LLM_API_KEY: "${OBSIDIAN_INGEST_LLM_API_KEY:-}"
+    volumes:
+      - ./:/app
+      - ${OBSIDIAN_VAULT:-D:/obsidian资料汇总/HYL}:/vault
+    command: ["doctor", "--config", "/app/config.docker.toml"]

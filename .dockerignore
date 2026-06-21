@@ -1,0 +1,19 @@
+.*
+!.dockerignore
+config.toml
+douyin-config.yml
+data
+cache
+logs
+inbox
+desktop/node_modules
+desktop/dist
+desktop/src-tauri/target
+docs
+sample-vault
+__pycache__
+**/__pycache__
+*.pyc
+*.sqlite
+*.log
+启动 Obsidian Ingest Studio.cmd
