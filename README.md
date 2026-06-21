@@ -64,8 +64,12 @@ py -3 -m unittest discover -s tests -v
 .\run.ps1 collect-list "https://www.bilibili.com/..." --platform bilibili --limit 20 --json --config .\config.toml
 
 # 队列维护
+.\run.ps1 queue --status failed --json --config .\config.toml
 .\run.ps1 retry-failed --limit 20 --json --config .\config.toml
 .\run.ps1 skip 123 --reason "不再需要" --json --config .\config.toml
+
+# 机器可读健康检查
+.\run.ps1 doctor --json --config .\config.toml
 ```
 
 ## 桌面控制台
@@ -74,6 +78,7 @@ py -3 -m unittest discover -s tests -v
 
 ```powershell
 cd D:\obsidian-ingest-pipeline\desktop
+$env:PATH = "D:\Nodejs;$env:USERPROFILE\.cargo\bin;$env:PATH"
 & 'D:\Nodejs\npm.cmd' run tauri dev
 ```
 
@@ -81,6 +86,7 @@ cd D:\obsidian-ingest-pipeline\desktop
 
 ```powershell
 cd D:\obsidian-ingest-pipeline\desktop
+$env:PATH = "D:\Nodejs;$env:USERPROFILE\.cargo\bin;$env:PATH"
 & 'D:\Nodejs\npm.cmd' run tauri build -- --no-sign
 ```
 

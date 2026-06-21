@@ -1,4 +1,7 @@
 import os
+import contextlib
+import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,6 +52,28 @@ class CliPipelineTest(unittest.TestCase):
             vault = Path(tmp) / "vault"
             self.assertEqual(main(["init", "--config", str(config), "--vault", str(vault)]), 0)
             self.assertEqual(main(["doctor", "--config", str(config)]), 0)
+
+    def test_doctor_json_reports_structured_checks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.toml"
+            vault = Path(tmp) / "vault"
+            self.assertEqual(main(["init", "--config", str(config), "--vault", str(vault)]), 0)
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                try:
+                    code = main(["doctor", "--json", "--config", str(config)])
+                except SystemExit as exc:
+                    code = int(exc.code)
+
+            self.assertEqual(code, 0, stderr.getvalue())
+            payload = json.loads(stdout.getvalue())
+            self.assertIn("ok", payload)
+            self.assertIn("checks", payload)
+            self.assertTrue(payload["ok"])
+            self.assertGreater(len(payload["checks"]), 0)
+            self.assertEqual({"name", "ok", "detail", "required"}, set(payload["checks"][0]))
 
 
 if __name__ == "__main__":

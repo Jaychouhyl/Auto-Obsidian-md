@@ -1,12 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CommandResult, LogFile, QueueItem, StatusPayload } from "./types";
+import type { CommandResult, LogFile, QueueItem, QueueStatus, StatusPayload } from "./types";
 
 export async function getStatus(): Promise<StatusPayload> {
   return invoke<StatusPayload>("get_status");
 }
 
-export async function getQueue(limit = 50): Promise<QueueItem[]> {
-  const payload = await invoke<{ items: QueueItem[] }>("get_queue", { limit });
+export async function getQueue(limit = 50, status: QueueStatus = "all"): Promise<QueueItem[]> {
+  const payload = await invoke<{ items: QueueItem[] }>("get_queue", { limit, status });
   return payload.items;
 }
 

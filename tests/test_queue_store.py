@@ -40,6 +40,24 @@ class QueueStoreTest(unittest.TestCase):
             self.assertEqual(fetched.status, "done")
             self.assertEqual(fetched.note_path, "Inbox/example.md")
 
+    def test_list_recent_can_filter_by_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = QueueStore(Path(tmp) / "queue.sqlite")
+            done = store.enqueue("https://example.com/done")
+            failed = store.enqueue("https://example.com/failed")
+            store.enqueue("https://example.com/pending")
+
+            store.mark_done(done.id, note_path="Inbox/done.md")
+            store.mark_failed(failed.id, error="download failed")
+
+            try:
+                items = store.list_recent(limit=10, status="failed")
+            except TypeError as exc:
+                self.fail(str(exc))
+
+            self.assertEqual([item.id for item in items], [failed.id])
+            self.assertEqual(items[0].error, "download failed")
+
 
 if __name__ == "__main__":
     unittest.main()

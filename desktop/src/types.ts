@@ -1,4 +1,5 @@
 export type QueueCounts = Record<string, number>;
+export type QueueStatus = "all" | "pending" | "processing" | "done" | "failed" | "skipped";
 
 export interface StatusPayload {
   paths: {
@@ -53,6 +54,7 @@ export interface LogFile {
 
 export interface AppState {
   activeView: "run" | "sources" | "queue" | "logs" | "knowledge" | "settings";
+  queueStatus: QueueStatus;
   status: StatusPayload | null;
   queue: QueueItem[];
   logs: LogFile[];

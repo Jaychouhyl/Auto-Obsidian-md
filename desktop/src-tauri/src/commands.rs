@@ -31,15 +31,21 @@ pub fn get_status() -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub fn get_queue(limit: u32) -> Result<Value, String> {
-    let result = run_ingest(&[
+pub fn get_queue(limit: u32, status: Option<String>) -> Result<Value, String> {
+    let mut args = vec![
         "queue".into(),
         "--json".into(),
         "--limit".into(),
         limit.to_string(),
-        "--config".into(),
-        config_arg(),
-    ])?;
+    ];
+    if let Some(status) = status {
+        args.push("--status".into());
+        args.push(status);
+    }
+    args.push("--config".into());
+    args.push(config_arg());
+
+    let result = run_ingest(&args)?;
     if !result.ok {
         return Err(command_error(&result));
     }

@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from obsidian_ingest.cli import main
+from obsidian_ingest.queue_store import QueueStore
 
 
 class CliStatusTest(unittest.TestCase):
@@ -50,6 +51,34 @@ class CliStatusTest(unittest.TestCase):
             self.assertEqual(payload["items"][0]["title"], "Example PDF")
             self.assertEqual(payload["items"][0]["platform"], "local_file")
             self.assertEqual(payload["items"][0]["status"], "pending")
+
+    def test_queue_json_can_filter_by_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "config.toml"
+            vault = root / "vault"
+
+            self.assertEqual(main(["init", "--config", str(config), "--vault", str(vault)]), 0)
+            self.assertEqual(main(["add", "https://example.com/pending", "--config", str(config)]), 0)
+            self.assertEqual(main(["add", "https://example.com/failed", "--config", str(config)]), 0)
+
+            store = QueueStore(root / "data" / "queue.sqlite")
+            failed = next(item for item in store.list_recent(limit=10) if item.url.endswith("/failed"))
+            store.mark_failed(failed.id, "download failed")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                try:
+                    code = main(["queue", "--json", "--status", "failed", "--config", str(config)])
+                except SystemExit as exc:
+                    code = int(exc.code)
+
+            self.assertEqual(code, 0, stderr.getvalue())
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(len(payload["items"]), 1)
+            self.assertEqual(payload["items"][0]["status"], "failed")
+            self.assertEqual(payload["items"][0]["error"], "download failed")
 
 
 if __name__ == "__main__":

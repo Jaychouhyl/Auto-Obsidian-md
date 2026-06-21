@@ -107,7 +107,8 @@ h2 {
 
 .actions,
 .row-actions,
-.cards {
+.cards,
+.filters {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
@@ -120,6 +121,26 @@ h2 {
 .row-actions button {
   padding: 6px 8px;
   white-space: nowrap;
+}
+
+.filters {
+  justify-content: flex-end;
+}
+
+.filter-button {
+  padding: 8px 10px;
+  border-color: #c4ccd2;
+}
+
+.filter-button.active {
+  background: #0a6f68;
+  border-color: #0a6f68;
+  color: #ffffff;
+}
+
+.empty {
+  color: #687580;
+  text-align: center;
 }
 
 .actions button:first-child {
@@ -218,6 +239,15 @@ th {
   .stats,
   .cards {
     grid-template-columns: 1fr;
+  }
+
+  .view-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .filters {
+    justify-content: flex-start;
   }
 
   .log-row {

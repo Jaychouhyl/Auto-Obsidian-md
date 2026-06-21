@@ -86,6 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = subparsers.add_parser("doctor", help="Check config and optional tools")
     doctor.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
+    doctor.add_argument("--json", action="store_true")
 
     status = subparsers.add_parser("status", help="Print project status")
     status.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
@@ -95,6 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     queue.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
     queue.add_argument("--json", action="store_true")
     queue.add_argument("--limit", type=int, default=50)
+    queue.add_argument("--status", default="all", choices=["all", "pending", "processing", "done", "failed", "skipped"])
 
     collect_douyin = subparsers.add_parser("collect-douyin", help="Collect Douyin favorites into queue")
     collect_douyin.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
@@ -207,7 +209,24 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     config = load_config(Path(args.config))
     config.paths.cache_dir.mkdir(parents=True, exist_ok=True)
     config.paths.queue_db.parent.mkdir(parents=True, exist_ok=True)
-    print(format_doctor(run_doctor(config)))
+    checks = run_doctor(config)
+    if args.json:
+        required_checks = {"config", "queue_db_parent", "cache_dir", "obsidian_mode", "obsidian_vault", "llm_api_key", "obsidian_rest_key"}
+        payload = {
+            "ok": all(check.ok for check in checks if check.name in required_checks),
+            "checks": [
+                {
+                    "name": check.name,
+                    "ok": check.ok,
+                    "detail": check.detail,
+                    "required": check.name in required_checks,
+                }
+                for check in checks
+            ],
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(format_doctor(checks))
     return 0
 
 
@@ -227,8 +246,9 @@ def _cmd_status(args: argparse.Namespace) -> int:
 def _cmd_queue(args: argparse.Namespace) -> int:
     config = load_config(Path(args.config))
     store = QueueStore(config.paths.queue_db)
-    items = [queue_item_to_dict(item) for item in store.list_recent(limit=args.limit)]
-    payload = {"items": items}
+    status_filter = None if args.status == "all" else args.status
+    items = [queue_item_to_dict(item) for item in store.list_recent(limit=args.limit, status=status_filter)]
+    payload = {"items": items, "status": args.status}
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:

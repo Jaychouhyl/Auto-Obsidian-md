@@ -19,6 +19,7 @@ import {
   writeLauncher,
 } from "./api";
 import { state, setBusy, setError, setMessage } from "./state";
+import type { QueueStatus } from "./types";
 
 const appRoot = document.querySelector<HTMLDivElement>("#app");
 
@@ -31,7 +32,7 @@ const app = appRoot;
 async function refresh(): Promise<void> {
   try {
     state.status = await getStatus();
-    state.queue = await getQueue(50);
+    state.queue = await getQueue(50, state.queueStatus);
     state.logs = await listRecentLogs(20);
   } catch (error) {
     setError(error instanceof Error ? error.message : String(error));
@@ -51,7 +52,7 @@ async function runAction(label: string, action: () => Promise<{ ok: boolean; std
       setMessage(result.stdout || `${label} 完成`);
     }
     state.status = await getStatus();
-    state.queue = await getQueue(50);
+    state.queue = await getQueue(50, state.queueStatus);
     state.logs = await listRecentLogs(20);
   } catch (error) {
     setError(error instanceof Error ? error.message : String(error));
@@ -146,6 +147,11 @@ function setView(view: typeof state.activeView): void {
   render();
 }
 
+async function setQueueStatus(status: QueueStatus): Promise<void> {
+  state.queueStatus = status;
+  await refresh();
+}
+
 function renderNav(): string {
   const items: Array<[typeof state.activeView, string]> = [
     ["run", "运行"],
@@ -233,28 +239,50 @@ function renderSourcesView(): string {
 }
 
 function renderQueueView(): string {
+  const filters: Array<[QueueStatus, string]> = [
+    ["all", "全部"],
+    ["pending", "待处理"],
+    ["processing", "处理中"],
+    ["failed", "失败"],
+    ["done", "已完成"],
+    ["skipped", "已跳过"],
+  ];
   return `
     <section class="view">
-      <h1>队列</h1>
+      <div class="view-header">
+        <h1>队列</h1>
+        <div class="filters">
+          ${filters
+            .map(
+              ([status, label]) =>
+                `<button class="filter-button ${state.queueStatus === status ? "active" : ""}" data-queue-status="${status}">${label}</button>`,
+            )
+            .join("")}
+        </div>
+      </div>
       <table>
         <thead><tr><th>ID</th><th>状态</th><th>标题</th><th>平台</th><th>输出</th><th>操作</th></tr></thead>
         <tbody>
-          ${state.queue
-            .map(
-              (item) =>
-                `<tr>
-                  <td>${item.id}</td>
-                  <td>${item.status}</td>
-                  <td>${escapeHtml(item.title ?? item.url)}</td>
-                  <td>${item.platform}</td>
-                  <td>${escapeHtml(item.note_path ?? "")}</td>
-                  <td class="row-actions">
-                    <button data-retry-id="${item.id}" ${state.busy ? "disabled" : ""}>重试</button>
-                    <button data-skip-id="${item.id}" ${state.busy ? "disabled" : ""}>跳过</button>
-                  </td>
-                </tr>`,
-            )
-            .join("")}
+          ${
+            state.queue.length
+              ? state.queue
+                  .map(
+                    (item) =>
+                      `<tr>
+                        <td>${item.id}</td>
+                        <td>${item.status}</td>
+                        <td>${escapeHtml(item.title ?? item.url)}</td>
+                        <td>${item.platform}</td>
+                        <td>${escapeHtml(item.note_path ?? "")}</td>
+                        <td class="row-actions">
+                          <button data-retry-id="${item.id}" ${state.busy ? "disabled" : ""}>重试</button>
+                          <button data-skip-id="${item.id}" ${state.busy ? "disabled" : ""}>跳过</button>
+                        </td>
+                      </tr>`,
+                  )
+                  .join("")
+              : '<tr><td colspan="6" class="empty">当前筛选下没有队列项。</td></tr>'
+          }
         </tbody>
       </table>
     </section>
@@ -302,6 +330,9 @@ function renderSettingsView(): string {
 function bindEvents(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.view as typeof state.activeView));
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-queue-status]").forEach((button) => {
+    button.addEventListener("click", () => void setQueueStatus(button.dataset.queueStatus as QueueStatus));
   });
   document.querySelector<HTMLButtonElement>("#refresh")?.addEventListener("click", refresh);
   document.querySelector<HTMLButtonElement>("#run-douyin")?.addEventListener("click", handleDouyin);

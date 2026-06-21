@@ -2,6 +2,7 @@ import type { AppState } from "./types";
 
 export const state: AppState = {
   activeView: "run",
+  queueStatus: "all",
   status: null,
   queue: [],
   logs: [],

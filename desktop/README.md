@@ -1,7 +1,33 @@
-# Tauri + Vanilla TS
+# Obsidian Ingest Studio
 
-This template should help get you started developing with Tauri in vanilla HTML, CSS and Typescript.
+桌面控制台基于 Tauri + TypeScript，调用项目根目录的 `run.ps1` 和同一套 Python 入库流程。
 
-## Recommended IDE Setup
+## 本地运行
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+```powershell
+cd D:\obsidian-ingest-pipeline\desktop
+$env:PATH = "D:\Nodejs;$env:USERPROFILE\.cargo\bin;$env:PATH"
+& 'D:\Nodejs\npm.cmd' run tauri dev
+```
+
+## 构建前端
+
+```powershell
+cd D:\obsidian-ingest-pipeline\desktop
+$env:PATH = "D:\Nodejs;$env:PATH"
+& 'D:\Nodejs\npm.cmd' run build
+```
+
+## 打包安装程序
+
+```powershell
+cd D:\obsidian-ingest-pipeline\desktop
+$env:PATH = "D:\Nodejs;$env:USERPROFILE\.cargo\bin;$env:PATH"
+& 'D:\Nodejs\npm.cmd' run tauri build -- --no-sign
+```
+
+安装包输出目录：
+
+```text
+desktop/src-tauri/target/release/bundle/nsis/
+```

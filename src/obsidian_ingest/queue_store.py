@@ -66,12 +66,18 @@ class QueueStore:
             ).fetchall()
         return [_row_to_item(row) for row in rows]
 
-    def list_recent(self, limit: int = 50) -> list[QueueItem]:
+    def list_recent(self, limit: int = 50, status: str | None = None) -> list[QueueItem]:
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM queue ORDER BY id DESC LIMIT ?",
-                (int(limit),),
-            ).fetchall()
+            if status:
+                rows = conn.execute(
+                    "SELECT * FROM queue WHERE status = ? ORDER BY id DESC LIMIT ?",
+                    (status, int(limit)),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM queue ORDER BY id DESC LIMIT ?",
+                    (int(limit),),
+                ).fetchall()
         return [_row_to_item(row) for row in rows]
 
     def count_by_status(self) -> dict[str, int]:
