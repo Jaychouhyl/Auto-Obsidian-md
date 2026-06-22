@@ -32,6 +32,9 @@ class CliStatusTest(unittest.TestCase):
             self.assertEqual(payload["queue"]["done"], 0)
             self.assertEqual(payload["queue"]["failed"], 0)
             self.assertTrue(payload["paths"]["queue_db"].endswith("queue.sqlite"))
+            self.assertEqual(payload["obsidian"]["mode"], "local")
+            self.assertIn("rest_base_url", payload["obsidian"])
+            self.assertEqual(payload["llm"]["language"], "zh-CN")
 
     def test_queue_json_lists_recent_items(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

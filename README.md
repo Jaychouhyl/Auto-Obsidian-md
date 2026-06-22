@@ -25,12 +25,14 @@ Dockerfile               CLI 容器镜像
 docker-compose.yml       Docker Compose 入口
 config.example.toml      本机配置模板
 config.docker.toml       Docker 配置模板
+INSTALL.md               安装说明
+RELEASE.md               发布清单
 ```
 
 ## 本机快速开始
 
 ```powershell
-cd D:\obsidian-ingest-pipeline
+cd <项目目录>
 py -3 -m unittest discover -s tests -v
 .\run.ps1 doctor --config .\config.toml
 ```
@@ -52,7 +54,7 @@ py -3 -m unittest discover -s tests -v
 .\run.ps1 scan-inbox --config .\config.toml
 
 # 扫描任意目录
-.\run.ps1 scan-directory --dir D:\Downloads --json --config .\config.toml
+.\run.ps1 scan-directory --dir <资料目录> --json --config .\config.toml
 
 # RSS / Atom
 .\run.ps1 collect-rss --feeds .\feeds.txt --limit 20 --json --config .\config.toml
@@ -78,17 +80,17 @@ py -3 -m unittest discover -s tests -v
 开发运行：
 
 ```powershell
-cd D:\obsidian-ingest-pipeline\desktop
-$env:PATH = "D:\Nodejs;$env:USERPROFILE\.cargo\bin;$env:PATH"
-& 'D:\Nodejs\npm.cmd' run tauri dev
+cd <项目目录>\desktop
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+npm run tauri dev
 ```
 
 打包 Windows 安装包：
 
 ```powershell
-cd D:\obsidian-ingest-pipeline\desktop
-$env:PATH = "D:\Nodejs;$env:USERPROFILE\.cargo\bin;$env:PATH"
-& 'D:\Nodejs\npm.cmd' run tauri build -- --no-sign
+cd <项目目录>\desktop
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+npm run tauri build -- --no-sign
 ```
 
 构建产物会在：
@@ -163,13 +165,14 @@ INSTALL_WHISPER=true
 ## 验证
 
 ```powershell
-$env:PYTHONPATH='D:\obsidian-ingest-pipeline\src'
-py -3 -m unittest discover -s D:\obsidian-ingest-pipeline\tests -v
+cd <项目目录>
+$env:PYTHONPATH = "$PWD\src"
+py -3 -m unittest discover -s tests -v
 
-cd D:\obsidian-ingest-pipeline\desktop
-& 'D:\Nodejs\npm.cmd' run build
+cd .\desktop
+npm run build
 
-cd D:\obsidian-ingest-pipeline\desktop\src-tauri
+cd .\src-tauri
 $env:Path="$env:USERPROFILE\.cargo\bin;$env:Path"
 cargo check
 ```

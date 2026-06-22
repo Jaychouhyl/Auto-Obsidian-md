@@ -1,5 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CommandResult, LogFile, QueueItem, QueueStatus, StatusPayload } from "./types";
+import type {
+  AppConfigDraft,
+  CommandResult,
+  DoctorReport,
+  LogFile,
+  QueueItem,
+  QueueStatus,
+  SourceFiles,
+  StatusPayload,
+} from "./types";
 
 export async function getStatus(): Promise<StatusPayload> {
   return invoke<StatusPayload>("get_status");
@@ -12,6 +21,26 @@ export async function getQueue(limit = 50, status: QueueStatus = "all"): Promise
 
 export async function runDoctor(): Promise<CommandResult> {
   return invoke<CommandResult>("run_doctor");
+}
+
+export async function runDoctorJson(): Promise<DoctorReport> {
+  return invoke<DoctorReport>("run_doctor_json");
+}
+
+export async function getAppConfig(): Promise<StatusPayload> {
+  return invoke<StatusPayload>("get_app_config");
+}
+
+export async function saveAppConfig(draft: AppConfigDraft): Promise<CommandResult> {
+  return invoke<CommandResult>("save_app_config", { draft });
+}
+
+export async function getSourceFiles(): Promise<SourceFiles> {
+  return invoke<SourceFiles>("get_source_files");
+}
+
+export async function saveSourceFiles(links: string, feeds: string): Promise<CommandResult> {
+  return invoke<CommandResult>("save_source_files", { links, feeds });
 }
 
 export async function collectDouyin(count: number): Promise<CommandResult> {

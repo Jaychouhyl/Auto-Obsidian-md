@@ -1,9 +1,15 @@
 import type { AppState } from "./types";
 
 export const state: AppState = {
-  activeView: "run",
+  activeView: "setup",
   queueStatus: "all",
   status: null,
+  configDraft: null,
+  sourceFiles: {
+    links: "",
+    feeds: "",
+  },
+  doctor: null,
   queue: [],
   logs: [],
   busy: false,

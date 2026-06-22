@@ -1,4 +1,6 @@
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::fs;
 
 use crate::logs::{recent_logs, LogFile};
 use crate::project::{feeds_txt, links_txt};
@@ -14,6 +16,124 @@ fn command_error(result: &CommandResult) -> String {
         return stdout.to_string();
     }
     format!("command failed with code {}", result.code)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ToolConfigDraft {
+    yt_dlp: String,
+    ffmpeg: String,
+    douyin_downloader: String,
+    douyin_config: String,
+    whisper: String,
+    funasr: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AppConfigDraft {
+    queue_db: String,
+    cache_dir: String,
+    obsidian_mode: String,
+    obsidian_vault: String,
+    obsidian_folder: String,
+    rest_base_url: String,
+    rest_api_key: String,
+    llm_enabled: bool,
+    llm_provider: String,
+    llm_base_url: String,
+    llm_api_key: String,
+    llm_model: String,
+    llm_language: String,
+    routing_enabled: bool,
+    fallback_folder: String,
+    allowed_folders: Vec<String>,
+    tools: ToolConfigDraft,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SourceFiles {
+    links: String,
+    feeds: String,
+}
+
+fn toml_string(value: &str) -> String {
+    let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{}\"", escaped)
+}
+
+fn toml_bool(value: bool) -> &'static str {
+    if value {
+        "true"
+    } else {
+        "false"
+    }
+}
+
+fn existing_toml_value(text: &str, key: &str) -> Option<String> {
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with(key) {
+            continue;
+        }
+        let (_, raw_value) = trimmed.split_once('=')?;
+        let value = raw_value
+            .trim()
+            .trim_matches('"')
+            .replace("\\\"", "\"")
+            .replace("\\\\", "\\");
+        return Some(value);
+    }
+    None
+}
+
+fn render_config(draft: &AppConfigDraft) -> String {
+    let folders = draft
+        .allowed_folders
+        .iter()
+        .map(|folder| {
+            folder
+                .trim()
+                .replace('\\', "/")
+                .trim_matches('/')
+                .to_string()
+        })
+        .filter(|folder| !folder.is_empty())
+        .fold(Vec::<String>::new(), |mut acc, folder| {
+            if !acc.contains(&folder) {
+                acc.push(folder);
+            }
+            acc
+        });
+    let folder_lines = folders
+        .iter()
+        .map(|folder| format!("    {},", toml_string(folder)))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        "[paths]\nqueue_db = {}\ncache_dir = {}\n\n[obsidian]\nmode = {}\nvault_path = {}\nfolder = {}\nrest_base_url = {}\nrest_api_key = {}\n\n[tools]\nyt_dlp = {}\nffmpeg = {}\ndouyin_downloader = {}\ndouyin_config = {}\nwhisper = {}\nfunasr = {}\n\n[llm]\nenabled = {}\nprovider = {}\nbase_url = {}\napi_key = {}\nmodel = {}\nlanguage = {}\n\n[routing]\nenabled = {}\nfallback_folder = {}\nallowed_folders = [\n{}\n]\n",
+        toml_string(&draft.queue_db),
+        toml_string(&draft.cache_dir),
+        toml_string(&draft.obsidian_mode),
+        toml_string(&draft.obsidian_vault),
+        toml_string(&draft.obsidian_folder),
+        toml_string(&draft.rest_base_url),
+        toml_string(&draft.rest_api_key),
+        toml_string(&draft.tools.yt_dlp),
+        toml_string(&draft.tools.ffmpeg),
+        toml_string(&draft.tools.douyin_downloader),
+        toml_string(&draft.tools.douyin_config),
+        toml_string(&draft.tools.whisper),
+        toml_string(&draft.tools.funasr),
+        toml_bool(draft.llm_enabled),
+        toml_string(&draft.llm_provider),
+        toml_string(&draft.llm_base_url),
+        toml_string(&draft.llm_api_key),
+        toml_string(&draft.llm_model),
+        toml_string(&draft.llm_language),
+        toml_bool(draft.routing_enabled),
+        toml_string(&draft.fallback_folder),
+        folder_lines,
+    )
 }
 
 #[tauri::command]
@@ -58,6 +178,65 @@ pub fn run_doctor() -> Result<CommandResult, String> {
 }
 
 #[tauri::command]
+pub fn run_doctor_json() -> Result<Value, String> {
+    let result = run_ingest(&[
+        "doctor".into(),
+        "--json".into(),
+        "--config".into(),
+        config_arg(),
+    ])?;
+    if !result.ok {
+        return Err(command_error(&result));
+    }
+    serde_json::from_str(&result.stdout).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn get_app_config() -> Result<Value, String> {
+    get_status()
+}
+
+#[tauri::command]
+pub fn save_app_config(draft: AppConfigDraft) -> Result<CommandResult, String> {
+    let config_path = crate::project::config_toml();
+    let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    let mut draft = draft;
+    if draft.llm_api_key.trim().is_empty() {
+        draft.llm_api_key = existing_toml_value(&existing, "api_key").unwrap_or_default();
+    }
+    if draft.rest_api_key.trim().is_empty() {
+        draft.rest_api_key = existing_toml_value(&existing, "rest_api_key").unwrap_or_default();
+    }
+    fs::write(&config_path, render_config(&draft)).map_err(|error| error.to_string())?;
+    Ok(CommandResult {
+        ok: true,
+        code: 0,
+        stdout: format!("Saved config: {}", config_path.display()),
+        stderr: String::new(),
+    })
+}
+
+#[tauri::command]
+pub fn get_source_files() -> Result<SourceFiles, String> {
+    Ok(SourceFiles {
+        links: fs::read_to_string(links_txt()).unwrap_or_default(),
+        feeds: fs::read_to_string(feeds_txt()).unwrap_or_default(),
+    })
+}
+
+#[tauri::command]
+pub fn save_source_files(links: String, feeds: String) -> Result<CommandResult, String> {
+    fs::write(links_txt(), links).map_err(|error| error.to_string())?;
+    fs::write(feeds_txt(), feeds).map_err(|error| error.to_string())?;
+    Ok(CommandResult {
+        ok: true,
+        code: 0,
+        stdout: "Saved source files".into(),
+        stderr: String::new(),
+    })
+}
+
+#[tauri::command]
 pub fn collect_douyin(count: u32) -> Result<CommandResult, String> {
     run_ingest(&[
         "collect-douyin".into(),
@@ -71,7 +250,12 @@ pub fn collect_douyin(count: u32) -> Result<CommandResult, String> {
 
 #[tauri::command]
 pub fn scan_inbox() -> Result<CommandResult, String> {
-    run_ingest(&["scan-inbox".into(), "--json".into(), "--config".into(), config_arg()])
+    run_ingest(&[
+        "scan-inbox".into(),
+        "--json".into(),
+        "--config".into(),
+        config_arg(),
+    ])
 }
 
 #[tauri::command]
@@ -112,7 +296,11 @@ pub fn clip_webpage(url: String) -> Result<CommandResult, String> {
 }
 
 #[tauri::command]
-pub fn collect_platform_list(url: String, platform: String, limit: u32) -> Result<CommandResult, String> {
+pub fn collect_platform_list(
+    url: String,
+    platform: String,
+    limit: u32,
+) -> Result<CommandResult, String> {
     run_ingest(&[
         "collect-list".into(),
         url,
