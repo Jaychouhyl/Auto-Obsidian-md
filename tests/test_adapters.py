@@ -111,6 +111,49 @@ class AdapterTest(unittest.TestCase):
         self.assertIn("考研资料汇总", serialized)
         self.assertIn("Inbox/Learning Inbox", serialized)
 
+    def test_summarize_transcript_accepts_string_tags_from_llm(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def read(self):
+                content = {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "summary": "摘要",
+                                        "key_points": ["要点"],
+                                        "action_items": ["行动"],
+                                        "tags": "#量化, 止损, 仓位 管理, 123",
+                                        "folder": "炒股与量化学习",
+                                    },
+                                    ensure_ascii=False,
+                                )
+                            }
+                        }
+                    ]
+                }
+                return json.dumps(content, ensure_ascii=False).encode("utf-8")
+
+        with patch("urllib.request.urlopen", return_value=FakeResponse()):
+            from obsidian_ingest.summarize import summarize_transcript
+
+            summary = summarize_transcript(
+                "量化交易",
+                enabled=True,
+                api_key="test-key",
+                base_url="https://api.example.com",
+                allowed_folders=["炒股与量化学习", "Inbox/Learning Inbox"],
+                fallback_folder="Inbox/Learning Inbox",
+            )
+
+        self.assertEqual(summary.tags, ["量化", "止损", "仓位-管理"])
+
     def test_fallback_summary_infers_kaoyan_folder(self):
         summary = fallback_summary(
             "二战考研离校前要处理档案、户口、复试材料。",
@@ -120,11 +163,36 @@ class AdapterTest(unittest.TestCase):
 
         self.assertEqual(summary.folder, "考研资料汇总")
 
+    def test_fallback_summary_infers_quant_folder(self):
+        summary = fallback_summary(
+            "量化交易复盘要记录股票买点、止损线、仓位管理和回撤控制。",
+            allowed_folders=["AI学习", "炒股与量化学习", "Inbox/Learning Inbox"],
+            fallback_folder="Inbox/Learning Inbox",
+        )
+
+        self.assertEqual(summary.folder, "炒股与量化学习")
+
+    def test_fallback_summary_infers_postgraduate_english_folder(self):
+        summary = fallback_summary(
+            "研后英语学习要继续背单词、练听力和复盘英文长难句。",
+            allowed_folders=["AI学习", "研后/英语学习", "Inbox/Learning Inbox"],
+            fallback_folder="Inbox/Learning Inbox",
+        )
+
+        self.assertEqual(summary.folder, "研后/英语学习")
+
     def test_fallback_summary_extracts_key_points(self):
         summary = fallback_summary("第一点很重要。\n第二点也重要。\n第三点是行动。")
 
         self.assertTrue(summary.summary)
         self.assertGreaterEqual(len(summary.key_points), 2)
+
+    def test_fallback_summary_generates_topic_tags(self):
+        summary = fallback_summary("量化交易需要设置止损，控制仓位，并记录复盘。")
+
+        self.assertIn("量化交易", summary.tags)
+        self.assertIn("止损", summary.tags)
+        self.assertIn("仓位管理", summary.tags)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from .queue_store import QueueItem
@@ -13,6 +14,7 @@ class NotePayload:
     transcript: str = ""
     source_notes: list[str] = field(default_factory=list)
     routed_folder: str = ""
+    tags: list[str] = field(default_factory=list)
 
 
 def render_markdown_note(item: QueueItem, payload: NotePayload) -> str:
@@ -25,8 +27,7 @@ def render_markdown_note(item: QueueItem, payload: NotePayload) -> str:
         f"created: {item.created_at}",
         "status: inbox",
         "tags:",
-        "  - learning",
-        "  - auto-ingest",
+        *[f"  - {tag}" for tag in _note_tags(payload.tags)],
         f"folder: {_yaml_string(payload.routed_folder)}",
         "---",
         "",
@@ -67,3 +68,20 @@ def _title_from_url(url: str) -> str:
 def _yaml_string(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
+
+
+def _note_tags(tags: list[str]) -> list[str]:
+    result: list[str] = []
+    for value in ["auto-ingest", *tags]:
+        tag = _clean_tag(value)
+        if tag and tag not in result:
+            result.append(tag)
+    return result
+
+
+def _clean_tag(value: str) -> str:
+    text = str(value).strip().lstrip("#").strip()
+    text = re.sub(r"\s+", "-", text)
+    if not text or text.isdigit():
+        return ""
+    return text

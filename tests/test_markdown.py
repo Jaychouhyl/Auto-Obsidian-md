@@ -37,6 +37,49 @@ class MarkdownRenderingTest(unittest.TestCase):
         self.assertIn("- Practice with feedback", rendered)
         self.assertIn("## 原始转写", rendered)
 
+    def test_topic_tags_render_into_frontmatter(self):
+        item = QueueItem(
+            id=2,
+            url="https://example.com/x",
+            title="量化笔记",
+            platform="web",
+            content_type="article",
+            status="pending",
+            created_at="2026-06-03T10:00:00",
+            updated_at="2026-06-03T10:00:00",
+            metadata={},
+            note_path=None,
+            error=None,
+        )
+        payload = NotePayload(summary="摘要", tags=["量化", "止损", "量化"])
+
+        rendered = render_markdown_note(item, payload)
+
+        self.assertIn("  - auto-ingest", rendered)
+        self.assertIn("  - 量化", rendered)
+        self.assertIn("  - 止损", rendered)
+        # 去重：量化 只应出现一次
+        self.assertEqual(rendered.count("  - 量化"), 1)
+
+    def test_empty_tags_still_render_provenance_tag(self):
+        item = QueueItem(
+            id=3,
+            url="https://example.com/y",
+            title="无标签",
+            platform="web",
+            content_type="article",
+            status="pending",
+            created_at="2026-06-03T10:00:00",
+            updated_at="2026-06-03T10:00:00",
+            metadata={},
+            note_path=None,
+            error=None,
+        )
+
+        rendered = render_markdown_note(item, NotePayload(summary="x"))
+
+        self.assertIn("  - auto-ingest", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

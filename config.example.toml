@@ -31,9 +31,9 @@ fallback_folder = "Inbox/Learning Inbox"
 allowed_folders = [
     "AI学习",
     "考研资料汇总",
-    "英语学习",
+    "炒股与量化学习",
+    "研后/英语学习",
     "工作",
     "Life",
-    "毕业前的30件事",
     "Inbox/Learning Inbox",
 ]

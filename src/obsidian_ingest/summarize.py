@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,7 @@ class SummaryResult:
     action_items: list[str]
     notes: list[str]
     folder: str = ""
+    tags: list[str] = field(default_factory=list)
 
 
 def build_openai_compatible_payload(
@@ -37,7 +38,9 @@ def build_openai_compatible_payload(
                 "role": "system",
                 "content": (
                     "You turn learning material into Obsidian-ready Chinese notes. "
-                    "Return strict JSON with summary, key_points, action_items, and folder. "
+                    "Return strict JSON with summary, key_points, action_items, tags, and folder. "
+                    "tags is a list of 3-6 concise Chinese topic keywords for retrieval; "
+                    "each tag has no '#' prefix and no spaces inside. "
                     "folder is the Obsidian folder where this note should be filed."
                 ),
             },
@@ -66,7 +69,7 @@ def summarize_transcript(
     if not enabled or not api_key:
         result = fallback_summary(transcript, allowed_folders=allowed_folders, fallback_folder=fallback_folder)
         note = "LLM 未启用或未配置 API key，已使用本地规则摘要。"
-        return SummaryResult(result.summary, result.key_points, result.action_items, result.notes + [note], result.folder)
+        return SummaryResult(result.summary, result.key_points, result.action_items, result.notes + [note], result.folder, result.tags)
 
     payload = build_openai_compatible_payload(model, transcript, language, allowed_folders, fallback_folder)
     request = urllib.request.Request(
@@ -88,6 +91,7 @@ def summarize_transcript(
         action_items=[str(x).strip() for x in parsed.get("action_items", []) if str(x).strip()],
         notes=["LLM 摘要已生成。"],
         folder=_validated_folder(str(parsed.get("folder", "")).strip(), allowed_folders, fallback_folder),
+        tags=_clean_tags(parsed.get("tags", [])),
     )
 
 
@@ -111,7 +115,8 @@ def fallback_summary(
         "根据核心知识点补充双链和个人例子。",
     ]
     folder = _infer_folder(text, allowed_folders, fallback_folder)
-    return SummaryResult(summary, key_points, action_items, [], folder)
+    tags = _infer_tags(text)
+    return SummaryResult(summary, key_points, action_items, [], folder, tags)
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -141,14 +146,53 @@ def _infer_folder(text: str, allowed_folders: list[str] | None, fallback_folder:
         return fallback_folder
     rules = [
         ("考研资料汇总", ["考研", "二战", "复试", "调剂", "备考", "档案", "离校", "成绩单"]),
-        ("英语学习", ["英语", "单词", "四六级", "雅思", "托福", "英文", "语法", "听力"]),
+        ("炒股与量化学习", ["量化", "股票", "炒股", "交易", "回测", "止损", "仓位", "回撤", "买点", "卖点"]),
+        ("研后/英语学习", ["英语", "单词", "四六级", "雅思", "托福", "英文", "语法", "听力", "长难句"]),
         ("AI学习", ["ai", "人工智能", "大模型", "llm", "chatgpt", "deepseek", "提示词", "智能体", "模型"]),
         ("工作", ["工作", "职场", "面试", "简历", "项目", "会议", "客户", "管理"]),
         ("Life", ["生活", "健康", "运动", "睡眠", "饮食", "心理", "情绪"]),
-        ("毕业前的30件事", ["毕业", "毕业前", "离校手续", "校园卡", "宿舍"]),
     ]
     lower = text.lower()
     for folder, keywords in rules:
         if folder in allowed and any(keyword.lower() in lower for keyword in keywords):
             return folder
     return fallback_folder
+
+
+def _infer_tags(text: str) -> list[str]:
+    rules = [
+        ("量化交易", ["量化", "交易策略", "回测"]),
+        ("股票", ["股票", "炒股", "证券"]),
+        ("止损", ["止损"]),
+        ("仓位管理", ["仓位"]),
+        ("回撤控制", ["回撤"]),
+        ("复盘", ["复盘"]),
+        ("考研", ["考研", "二战", "复试", "调剂", "备考"]),
+        ("英语学习", ["英语", "单词", "英文", "语法", "听力", "长难句"]),
+        ("大模型", ["大模型", "llm", "chatgpt", "deepseek"]),
+        ("提示词", ["提示词", "prompt"]),
+        ("工作", ["工作", "职场", "面试", "简历"]),
+        ("健康", ["健康", "运动", "睡眠", "饮食"]),
+    ]
+    lower = text.lower()
+    tags = [tag for tag, keywords in rules if any(keyword.lower() in lower for keyword in keywords)]
+    return _clean_tags(tags[:6])
+
+
+def _clean_tags(values: object) -> list[str]:
+    if isinstance(values, str):
+        candidates: list[object] = re.split(r"[,，;；、\n]+", values)
+    elif isinstance(values, list):
+        candidates = values
+    else:
+        return []
+    result: list[str] = []
+    for value in candidates:
+        text = str(value).strip().lstrip("#").strip()
+        text = re.sub(r"\s+", "-", text)
+        if not text or text.isdigit() or text in result:
+            continue
+        result.append(text)
+        if len(result) >= 6:
+            break
+    return result

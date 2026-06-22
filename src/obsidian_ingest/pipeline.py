@@ -64,6 +64,7 @@ def process_item(config: AppConfig, store: QueueStore, item: QueueItem) -> Pipel
             transcript=transcription.text,
             source_notes=acquired.notes + transcription.notes + [f"自动分类: {target_folder}"] + summary.notes,
             routed_folder=target_folder,
+            tags=summary.tags,
         )
         note = render_markdown_note(item, payload)
         writer = build_writer(config)

@@ -8,6 +8,7 @@
 - 批量入口：`links.txt`、`inbox`、任意目录扫描。
 - 来源采集：RSS / Atom、网页剪藏、YouTube 播放列表 / 频道、B站公开合集 / 收藏链接。
 - 内容处理：PDF 文本抽取、字幕清洗、音视频转写、OpenAI-compatible LLM 摘要。
+- 知识组织：写入主题标签，按配置里的真实 Obsidian 文件夹路由。
 - 写入方式：直接写入本地 Obsidian vault，或接 Obsidian Local REST API。
 - 队列维护：查看状态、重试失败项、跳过条目。
 - 桌面控制台：Tauri 本机应用，调用同一套 Python pipeline。
