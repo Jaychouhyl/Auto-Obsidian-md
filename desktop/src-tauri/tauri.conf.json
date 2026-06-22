@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Obsidian Ingest Studio",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "identifier": "com.local.obsidianingest",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "node_modules\\.bin\\tsc.cmd && node_modules\\.bin\\vite.cmd build",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },

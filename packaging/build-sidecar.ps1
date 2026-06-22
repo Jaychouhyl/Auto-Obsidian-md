@@ -17,7 +17,7 @@ New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 $env:PYTHONPATH = Join-Path $ProjectRoot "src"
 $env:PYTHONIOENCODING = "utf-8"
 
-$PythonCommand = if ($Python) {
+[string[]]$PythonCommand = if ($Python) {
     @($Python)
 } elseif (Get-Command py -ErrorAction SilentlyContinue) {
     @("py", "-3")

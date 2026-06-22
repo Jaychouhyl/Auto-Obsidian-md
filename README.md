@@ -102,7 +102,7 @@ cd <项目目录>
 
 cd .\desktop
 $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
-npm run tauri build -- --no-sign
+npm run tauri build
 ```
 
 构建产物会在：

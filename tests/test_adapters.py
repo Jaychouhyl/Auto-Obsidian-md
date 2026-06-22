@@ -36,11 +36,11 @@ class AdapterTest(unittest.TestCase):
             request,
             yt_dlp_cmd="yt-dlp",
             douyin_cmd="douyin-dl",
-            douyin_config="D:/obsidian-ingest-pipeline/douyin-config.yml",
+            douyin_config="C:/tmp/auto-obsidian-md/douyin-config.yml",
         )
 
         self.assertIn("-c", command)
-        self.assertIn("D:/obsidian-ingest-pipeline/douyin-config.yml", command)
+        self.assertIn("C:/tmp/auto-obsidian-md/douyin-config.yml", command)
 
     def test_acquire_source_falls_back_when_command_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
