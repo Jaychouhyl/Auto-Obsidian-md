@@ -530,7 +530,7 @@ function renderUpdatesView(): string {
       </div>
       <div class="settings">
         <p><b>仓库：</b>Jaychouhyl/Auto-Obsidian-md</p>
-        <p><b>当前版本：</b>0.1.0</p>
+        <p><b>当前版本：</b>0.2.0</p>
       </div>
       ${renderMessageArea()}
     </section>

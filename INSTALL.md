@@ -8,27 +8,26 @@
 4. 填写 DeepSeek / OpenAI-compatible 服务地址、模型和 API Key。
 5. 点击“保存”，再点击“健康检查”。
 
-## 本机依赖
+## 普通用户依赖
 
-推荐安装：
+只使用 Windows 安装包时，不需要安装 Python、Node.js 或 Rust。
+
+可选依赖：
 
 ```text
-Python 3.11+
-Node.js 22+
-Rust stable
-Docker Desktop
 ffmpeg
 yt-dlp
+whisper
 ```
 
-如果只使用安装包运行桌面端，普通用户不需要直接操作 Rust 和 Node.js。
+这些用于视频下载、音频转写等高级能力。只做网页、RSS、本地文本/PDF 入库时，可以先不装。
 
 ## 配置文件
 
 默认本机配置：
 
 ```text
-<项目目录>\config.toml
+%LOCALAPPDATA%\Obsidian Ingest Studio\config.toml
 ```
 
 不会提交到 Git：

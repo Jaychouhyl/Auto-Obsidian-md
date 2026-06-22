@@ -1,10 +1,10 @@
 [paths]
-queue_db = "D:/obsidian-ingest-pipeline/data/queue.sqlite"
-cache_dir = "D:/obsidian-ingest-pipeline/cache"
+queue_db = "./data/queue.sqlite"
+cache_dir = "./cache"
 
 [obsidian]
 mode = "local"
-vault_path = "D:/ObsidianVault"
+vault_path = "./sample-vault"
 folder = "Inbox/Learning Inbox"
 rest_base_url = "http://127.0.0.1:27123"
 rest_api_key = ""

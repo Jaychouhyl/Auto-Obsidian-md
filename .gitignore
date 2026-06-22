@@ -48,6 +48,8 @@ yarn-error.log*
 # Rust / Tauri build output
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
+desktop/src-tauri/binaries/*.exe
+build/
 
 # Internal planning notes and local handoff docs
 docs/

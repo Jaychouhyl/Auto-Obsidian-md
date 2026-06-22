@@ -3,7 +3,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::project::{config_toml, run_ps1};
+use crate::project::{backend_exe, config_toml, project_root, run_ps1};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CommandResult {
@@ -16,18 +16,36 @@ pub struct CommandResult {
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(180);
 
 pub fn run_ingest(args: &[String]) -> Result<CommandResult, String> {
-    let mut command = Command::new("powershell.exe");
-    command
-        .arg("-NoProfile")
-        .arg("-NonInteractive")
-        .arg("-ExecutionPolicy")
-        .arg("Bypass")
-        .arg("-File")
-        .arg(run_ps1());
+    let workspace = project_root();
+    let mut command = if let Some(backend) = backend_exe() {
+        Command::new(backend)
+    } else if run_ps1().is_file() {
+        let mut command = Command::new("powershell.exe");
+        command
+            .arg("-NoProfile")
+            .arg("-NonInteractive")
+            .arg("-ExecutionPolicy")
+            .arg("Bypass")
+            .arg("-File")
+            .arg(run_ps1());
+        command
+    } else {
+        return Ok(CommandResult {
+            ok: false,
+            code: -1,
+            stdout: String::new(),
+            stderr: "obsidian ingest backend is missing; reinstall the app or rebuild the sidecar"
+                .into(),
+        });
+    };
 
     for arg in args {
         command.arg(arg);
     }
+    command
+        .current_dir(&workspace)
+        .env("OBSIDIAN_INGEST_HOME", &workspace)
+        .env("PYTHONIOENCODING", "utf-8");
 
     let mut child = command
         .stdout(Stdio::piped())

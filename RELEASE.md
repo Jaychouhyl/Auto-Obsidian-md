@@ -3,6 +3,8 @@
 ## 发布前
 
 - `python -m unittest discover -s tests -v`
+- `python -m pip install pyinstaller`
+- `.\packaging\build-sidecar.ps1`
 - `npm run build` in `desktop`
 - `cargo check` in `desktop/src-tauri`
 - `docker compose config --quiet`
@@ -17,7 +19,7 @@ $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
 npm run tauri build -- --no-sign
 ```
 
-如果 Node.js、npm 或 Rust 不在 PATH，先把对应安装目录加入当前终端 PATH。
+如果 Node.js、npm、Rust 或 PyInstaller 不在 PATH，先把对应安装目录加入当前终端 PATH，或者通过 `python -m pip install pyinstaller` 安装打包器。
 
 安装包目录：
 
@@ -28,9 +30,9 @@ desktop/src-tauri/target/release/bundle/nsis/
 ## GitHub Release
 
 ```powershell
-git tag -a v0.1.1 -m "发布 v0.1.1"
+git tag -a v0.02 -m "发布 v0.02"
 git push origin main
-git push origin v0.1.1
+git push origin v0.02
 ```
 
 推送 `v*` tag 后，GitHub Actions 会构建 Windows 安装包并发布到 Releases。

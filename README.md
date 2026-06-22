@@ -19,6 +19,7 @@
 ```text
 src/obsidian_ingest      Python 入库引擎
 desktop                  Tauri 桌面控制台
+packaging                Windows sidecar 打包脚本
 automation               Windows 批处理脚本
 tests                    Python 回归测试
 Dockerfile               CLI 容器镜像
@@ -77,7 +78,15 @@ py -3 -m unittest discover -s tests -v
 
 ## 桌面控制台
 
+普通用户直接下载 Release 里的 Windows 安装包即可，不需要安装 Python、Node.js 或 Rust。安装后，桌面端会在当前 Windows 用户的 AppData 目录创建工作区，并把配置、队列、缓存和导入文件放在那里。
+
 开发运行：
+
+```powershell
+cd <项目目录>
+py -3 -m pip install pyinstaller
+.\packaging\build-sidecar.ps1
+```
 
 ```powershell
 cd <项目目录>\desktop
@@ -88,7 +97,10 @@ npm run tauri dev
 打包 Windows 安装包：
 
 ```powershell
-cd <项目目录>\desktop
+cd <项目目录>
+.\packaging\build-sidecar.ps1
+
+cd .\desktop
 $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
 npm run tauri build -- --no-sign
 ```
@@ -97,12 +109,6 @@ npm run tauri build -- --no-sign
 
 ```text
 desktop/src-tauri/target/release/bundle/nsis/
-```
-
-Rust 工具链默认安装在：
-
-```text
-C:\Users\admin\.cargo\bin
 ```
 
 如果当前 PowerShell 找不到 `cargo`，先临时加入 PATH：

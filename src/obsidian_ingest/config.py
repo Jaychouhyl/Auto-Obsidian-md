@@ -59,17 +59,30 @@ class AppConfig:
     routing: RoutingConfig
 
 
-DEFAULT_PROJECT_DIR = Path("D:/obsidian-ingest-pipeline")
+def _default_project_dir() -> Path:
+    override = os.getenv("OBSIDIAN_INGEST_HOME", "").strip()
+    if override:
+        return Path(override)
+    local_app_data = os.getenv("LOCALAPPDATA", "").strip()
+    if local_app_data:
+        return Path(local_app_data) / "Obsidian Ingest Studio"
+    return Path.home() / ".obsidian-ingest"
+
+
+DEFAULT_PROJECT_DIR = _default_project_dir()
 
 
 def write_default_config(config_path: Path, vault_path: Path) -> None:
     config_path = Path(config_path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     template = Path(__file__).resolve().parents[2] / "config.example.toml"
-    text = template.read_text(encoding="utf-8")
-    text = text.replace('vault_path = "D:/ObsidianVault"', f'vault_path = "{vault_path.as_posix()}"')
-    text = text.replace('queue_db = "D:/obsidian-ingest-pipeline/data/queue.sqlite"', f'queue_db = "{(config_path.parent / "data" / "queue.sqlite").as_posix()}"')
-    text = text.replace('cache_dir = "D:/obsidian-ingest-pipeline/cache"', f'cache_dir = "{(config_path.parent / "cache").as_posix()}"')
+    if template.exists():
+        text = template.read_text(encoding="utf-8")
+        text = text.replace('vault_path = "./sample-vault"', f'vault_path = "{vault_path.as_posix()}"')
+        text = text.replace('queue_db = "./data/queue.sqlite"', f'queue_db = "{(config_path.parent / "data" / "queue.sqlite").as_posix()}"')
+        text = text.replace('cache_dir = "./cache"', f'cache_dir = "{(config_path.parent / "cache").as_posix()}"')
+    else:
+        text = _default_config_template(config_path, vault_path)
     config_path.write_text(text, encoding="utf-8")
 
 
@@ -169,3 +182,49 @@ def _string_list(value: object) -> list[str]:
     if isinstance(value, str) and value.strip():
         return [value.strip().replace("\\", "/").strip("/")]
     return []
+
+
+def _default_config_template(config_path: Path, vault_path: Path) -> str:
+    queue_db = (config_path.parent / "data" / "queue.sqlite").as_posix()
+    cache_dir = (config_path.parent / "cache").as_posix()
+    vault = vault_path.as_posix()
+    return f"""[paths]
+queue_db = "{queue_db}"
+cache_dir = "{cache_dir}"
+
+[obsidian]
+mode = "local"
+vault_path = "{vault}"
+folder = "Inbox/Learning Inbox"
+rest_base_url = "http://127.0.0.1:27123"
+rest_api_key = ""
+
+[tools]
+yt_dlp = "yt-dlp"
+ffmpeg = "ffmpeg"
+douyin_downloader = "douyin-dl"
+douyin_config = ""
+whisper = "whisper"
+funasr = "funasr"
+
+[llm]
+enabled = false
+provider = "openai-compatible"
+base_url = "https://api.deepseek.com/v1"
+api_key = ""
+model = "deepseek-chat"
+language = "zh-CN"
+
+[routing]
+enabled = true
+fallback_folder = "Inbox/Learning Inbox"
+allowed_folders = [
+    "AI学习",
+    "考研资料汇总",
+    "炒股与量化学习",
+    "研后/英语学习",
+    "工作",
+    "Life",
+    "Inbox/Learning Inbox",
+]
+"""
