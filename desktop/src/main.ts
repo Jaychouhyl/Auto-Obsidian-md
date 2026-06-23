@@ -1,4 +1,5 @@
 import "./styles.css";
+import { getVersion } from "@tauri-apps/api/app";
 import {
   clipWebpage,
   collectPlatformList,
@@ -44,6 +45,25 @@ async function refresh(): Promise<void> {
   } catch (error) {
     setError(error instanceof Error ? error.message : String(error));
   }
+  render();
+}
+
+async function loadDoctorSilently(): Promise<void> {
+  try {
+    state.doctor = await runDoctorJson();
+  } catch {
+    // 自检失败不阻塞界面；横幅仅在有结果且存在问题时显示
+  }
+}
+
+async function init(): Promise<void> {
+  try {
+    state.appVersion = await getVersion();
+  } catch {
+    // 取不到版本号时留空，更新页显示“未知”
+  }
+  await refresh();
+  await loadDoctorSilently();
   render();
 }
 
@@ -171,6 +191,8 @@ function buildDraftFromForm(): AppConfigDraft {
 
 async function handleSaveConfig(): Promise<void> {
   await runAction("保存配置", () => saveAppConfig(buildDraftFromForm()));
+  await loadDoctorSilently();
+  render();
 }
 
 async function handleDoctorJson(): Promise<void> {
@@ -280,7 +302,17 @@ async function handleCheckUpdates(): Promise<void> {
       setMessage("当前没有可用发布版本。");
     } else {
       const payload = (await response.json()) as { tag_name?: string; html_url?: string; name?: string };
-      setMessage(`最新版本：${payload.name || payload.tag_name || "unknown"}\n${payload.html_url || ""}`);
+      const latest = (payload.tag_name || payload.name || "").replace(/^v/i, "");
+      const current = state.appVersion;
+      if (!latest) {
+        setMessage("未能识别最新版本号。");
+      } else if (!current) {
+        setMessage(`最新版本：${latest}\n${payload.html_url || ""}`);
+      } else if (compareVersions(current, latest) >= 0) {
+        setMessage(`已是最新版本（当前 ${current}，最新 ${latest}）。`);
+      } else {
+        setMessage(`有新版本可更新：当前 ${current} → 最新 ${latest}\n${payload.html_url || ""}`);
+      }
     }
   } catch (error) {
     setError(error instanceof Error ? error.message : String(error));
@@ -288,6 +320,18 @@ async function handleCheckUpdates(): Promise<void> {
     setBusy(false);
     render();
   }
+}
+
+function compareVersions(a: string, b: string): number {
+  const pa = a.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const pb = b.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const length = Math.max(pa.length, pb.length);
+  for (let i = 0; i < length; i += 1) {
+    const da = pa[i] ?? 0;
+    const db = pb[i] ?? 0;
+    if (da !== db) return da < db ? -1 : 1;
+  }
+  return 0;
 }
 
 function setView(view: typeof state.activeView): void {
@@ -530,7 +574,7 @@ function renderUpdatesView(): string {
       </div>
       <div class="settings">
         <p><b>仓库：</b>Jaychouhyl/Auto-Obsidian-md</p>
-        <p><b>当前版本：</b>0.3.0</p>
+        <p><b>当前版本：</b>${escapeHtml(state.appVersion || "未知")}</p>
       </div>
       ${renderMessageArea()}
     </section>
@@ -635,6 +679,31 @@ function renderMessageArea(): string {
   `;
 }
 
+function renderBanner(): string {
+  if (state.bannerDismissed || !state.doctor) return "";
+  const issues = state.doctor.checks.filter((check) => !check.ok);
+  if (issues.length === 0) return "";
+  const items = issues
+    .map(
+      (check) =>
+        `<li class="${check.required ? "bad" : "warn"}"><b>${escapeHtml(check.name)}</b> — ${escapeHtml(check.detail)}</li>`,
+    )
+    .join("");
+  return `
+    <div class="banner">
+      <div class="banner-head">
+        <b>环境检查发现 ${issues.length} 项待处理</b>
+        <span class="banner-actions">
+          <button data-view="setup">去配置</button>
+          <button id="dismiss-banner">关闭</button>
+        </span>
+      </div>
+      <ul class="banner-list">${items}</ul>
+      <small class="muted">缺失的下载 / 转写工具只影响视频处理；只做网页 / RSS / 本地文本入库可忽略。</small>
+    </div>
+  `;
+}
+
 function bindEvents(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.view as typeof state.activeView));
@@ -659,6 +728,10 @@ function bindEvents(): void {
   document.querySelector<HTMLButtonElement>("#knowledge-maintenance")?.addEventListener("click", () => runAction("生成知识库报告", knowledgeMaintenance));
   document.querySelector<HTMLButtonElement>("#write-launcher")?.addEventListener("click", () => runAction("生成启动器", writeLauncher));
   document.querySelector<HTMLButtonElement>("#check-updates")?.addEventListener("click", () => void handleCheckUpdates());
+  document.querySelector<HTMLButtonElement>("#dismiss-banner")?.addEventListener("click", () => {
+    state.bannerDismissed = true;
+    render();
+  });
   document.querySelectorAll<HTMLButtonElement>("[data-retry-id]").forEach((button) => {
     button.addEventListener("click", () => void handleRetryItem(Number.parseInt(button.dataset.retryId ?? "0", 10)));
   });
@@ -668,7 +741,7 @@ function bindEvents(): void {
 }
 
 function render(): void {
-  app.innerHTML = `<div class="shell"><aside><div class="brand">Obsidian Ingest</div>${renderNav()}</aside><main>${renderView()}</main></div>`;
+  app.innerHTML = `<div class="shell"><aside><div class="brand">Obsidian Ingest</div>${renderNav()}</aside><main>${renderBanner()}${renderView()}</main></div>`;
   bindEvents();
 }
 
@@ -712,4 +785,4 @@ function escapeAttr(value: string): string {
 }
 
 render();
-refresh();
+void init();

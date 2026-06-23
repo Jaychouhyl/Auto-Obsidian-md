@@ -80,6 +80,46 @@ class MarkdownRenderingTest(unittest.TestCase):
 
         self.assertIn("  - auto-ingest", rendered)
 
+    def test_incomplete_note_marked_with_status_and_tag(self):
+        item = QueueItem(
+            id=4,
+            url="https://v.douyin.com/x/",
+            title="缺工具的视频",
+            platform="douyin",
+            content_type="video",
+            status="pending",
+            created_at="2026-06-03T10:00:00",
+            updated_at="2026-06-03T10:00:00",
+            metadata={},
+            note_path=None,
+            error=None,
+        )
+
+        rendered = render_markdown_note(item, NotePayload(summary="x", incomplete=True))
+
+        self.assertIn("status: incomplete", rendered)
+        self.assertIn("  - 待补来源", rendered)
+
+    def test_complete_note_uses_inbox_status_without_flag(self):
+        item = QueueItem(
+            id=5,
+            url="https://example.com/z",
+            title="正常笔记",
+            platform="web",
+            content_type="article",
+            status="pending",
+            created_at="2026-06-03T10:00:00",
+            updated_at="2026-06-03T10:00:00",
+            metadata={},
+            note_path=None,
+            error=None,
+        )
+
+        rendered = render_markdown_note(item, NotePayload(summary="x"))
+
+        self.assertIn("status: inbox", rendered)
+        self.assertNotIn("待补来源", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

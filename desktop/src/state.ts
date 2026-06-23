@@ -15,6 +15,8 @@ export const state: AppState = {
   busy: false,
   message: "",
   error: "",
+  bannerDismissed: false,
+  appVersion: "",
 };
 
 export function setBusy(value: boolean): void {

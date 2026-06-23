@@ -15,6 +15,7 @@ class NotePayload:
     source_notes: list[str] = field(default_factory=list)
     routed_folder: str = ""
     tags: list[str] = field(default_factory=list)
+    incomplete: bool = False
 
 
 def render_markdown_note(item: QueueItem, payload: NotePayload) -> str:
@@ -25,9 +26,9 @@ def render_markdown_note(item: QueueItem, payload: NotePayload) -> str:
         f"content_type: {item.content_type}",
         f"url: {item.url}",
         f"created: {item.created_at}",
-        "status: inbox",
+        f"status: {'incomplete' if payload.incomplete else 'inbox'}",
         "tags:",
-        *[f"  - {tag}" for tag in _note_tags(payload.tags)],
+        *[f"  - {tag}" for tag in _note_tags(payload.tags, payload.incomplete)],
         f"folder: {_yaml_string(payload.routed_folder)}",
         "---",
         "",
@@ -70,9 +71,12 @@ def _yaml_string(value: str) -> str:
     return f'"{escaped}"'
 
 
-def _note_tags(tags: list[str]) -> list[str]:
+def _note_tags(tags: list[str], incomplete: bool = False) -> list[str]:
+    seed = ["auto-ingest"]
+    if incomplete:
+        seed.append("待补来源")
     result: list[str] = []
-    for value in ["auto-ingest", *tags]:
+    for value in [*seed, *tags]:
         tag = _clean_tag(value)
         if tag and tag not in result:
             result.append(tag)

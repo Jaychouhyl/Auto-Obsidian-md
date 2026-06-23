@@ -65,6 +65,7 @@ def process_item(config: AppConfig, store: QueueStore, item: QueueItem) -> Pipel
             source_notes=acquired.notes + transcription.notes + [f"自动分类: {target_folder}"] + summary.notes,
             routed_folder=target_folder,
             tags=summary.tags,
+            incomplete=_note_incomplete(acquired, transcription),
         )
         note = render_markdown_note(item, payload)
         writer = build_writer(config)
@@ -74,6 +75,17 @@ def process_item(config: AppConfig, store: QueueStore, item: QueueItem) -> Pipel
     except Exception as exc:
         store.mark_failed(item.id, str(exc))
         return PipelineResult(item.id, "failed", None, str(exc))
+
+
+def _note_incomplete(acquired, transcription) -> bool:
+    """笔记是否为占位/降级稿：缺下载或转写工具、下载失败等导致没有真实内容。"""
+    if acquired.status in {"metadata_only", "failed"}:
+        return True
+    if acquired.media_path is not None and transcription.engine in {"hint", "none"}:
+        return True
+    if transcription.engine == "none" or not transcription.text.strip():
+        return True
+    return False
 
 
 def build_writer(config: AppConfig):

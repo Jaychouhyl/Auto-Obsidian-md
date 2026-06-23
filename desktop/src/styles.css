@@ -386,6 +386,43 @@ th {
   color: #687580;
 }
 
+.banner {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid #e9cf87;
+  border-radius: 8px;
+  background: #fdf6e3;
+  display: grid;
+  gap: 8px;
+}
+
+.banner-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.banner-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.banner-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.banner-list li.bad {
+  color: #9f1d1d;
+}
+
+.banner-list li.warn {
+  color: #8a6d1b;
+}
+
 @media (max-width: 880px) {
   .shell {
     grid-template-columns: 1fr;

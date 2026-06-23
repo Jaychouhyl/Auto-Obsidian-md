@@ -116,4 +116,6 @@ export interface AppState {
   busy: boolean;
   message: string;
   error: string;
+  bannerDismissed: boolean;
+  appVersion: string;
 }
