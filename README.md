@@ -80,6 +80,18 @@ py -3 -m unittest discover -s tests -v
 
 普通用户直接下载 Release 里的 Windows 安装包即可，不需要安装 Python、Node.js 或 Rust。安装后，桌面端会在当前 Windows 用户的 AppData 目录创建工作区，并把配置、队列、缓存和导入文件放在那里。
 
+### 处理功能的前置依赖（重要）
+
+安装包本身不含视频下载与转写工具。**只做网页剪藏、RSS、本地文本 / PDF 入库不需要额外安装**；但要下载并转写抖音 / B站 / YouTube 等音视频，机器上仍需自行安装这些外部工具，并在桌面端「配置 / 高级」里填好路径：
+
+| 用途 | 需要的工具 |
+| --- | --- |
+| 视频 / 音频下载 | `yt-dlp`、`ffmpeg`（抖音另需 `douyin-dl`） |
+| 语音转文字 | `whisper` 或 `FunASR` |
+| 摘要与自动分类 | 自己的 DeepSeek（或其它 OpenAI 兼容）API Key，填在「配置 → API Key」 |
+
+装好后，在桌面端「配置 → 健康检查」（或命令行 `doctor`）确认每项为 OK，缺失项会显示 WARN，按提示补齐即可。未配置时仍能入库，但只会得到一条"未下载 / 未转写"的占位笔记。
+
 开发运行：
 
 ```powershell

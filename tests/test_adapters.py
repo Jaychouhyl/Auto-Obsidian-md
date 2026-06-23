@@ -46,6 +46,7 @@ class AdapterTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             result = acquire_source(
                 AcquisitionRequest(url="https://example.com/a", platform="web", output_dir=Path(tmp)),
+                yt_dlp_cmd="obsidian-ingest-missing-tool",
                 dry_run_missing_tools=True,
             )
 
