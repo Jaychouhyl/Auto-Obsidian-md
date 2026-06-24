@@ -40,10 +40,10 @@
 - Create: `src/obsidian_ingest/accounts/providers/tiktok.py`
 - Test: `tests/test_account_providers.py`
 
-- [ ] 先写失败测试，覆盖登录 URL、登录成功判定、昵称与平台 ID 清洗、未登录与页面结构异常。
-- [ ] 为抖音解析昵称和抖音号，为哔哩哔哩解析 `nav` 接口，为 YouTube/TikTok 提供页面身份识别。
-- [ ] 所有适配器返回统一候选账号结构和明确错误码。
-- [ ] 运行适配器测试并提交。
+- [x] 先写失败测试，覆盖登录 URL、登录成功判定、昵称与平台 ID 清洗、未登录与页面结构异常。
+- [x] 为抖音解析昵称和抖音号，为哔哩哔哩解析 `nav` 接口，为 YouTube/TikTok 提供页面身份识别。
+- [x] 所有适配器返回统一候选账号结构和明确错误码。
+- [x] 运行适配器测试并提交。
 
 ## Task 4：实现 Edge 隔离登录与临时 Cookie
 

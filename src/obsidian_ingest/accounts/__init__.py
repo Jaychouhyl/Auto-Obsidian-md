@@ -1,4 +1,4 @@
-from .models import AccountProfile, AccountStatus, Platform
+from .models import AccountCandidate, AccountProfile, AccountStatus, Platform
 from .store import AccountStore
 
-__all__ = ["AccountProfile", "AccountStatus", "AccountStore", "Platform"]
+__all__ = ["AccountCandidate", "AccountProfile", "AccountStatus", "AccountStore", "Platform"]

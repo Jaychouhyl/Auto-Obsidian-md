@@ -20,6 +20,22 @@ class AccountStatus(StrEnum):
 
 
 @dataclass(frozen=True)
+class AccountCandidate:
+    platform: Platform
+    display_name: str
+    platform_user_id: str
+    source_url: str = ""
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "platform": self.platform.value,
+            "display_name": self.display_name,
+            "platform_user_id": self.platform_user_id,
+            "source_url": self.source_url,
+        }
+
+
+@dataclass(frozen=True)
 class AccountProfile:
     id: str
     platform: Platform
