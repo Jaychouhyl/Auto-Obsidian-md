@@ -12,10 +12,10 @@
 
 ## Task 1：固化现有抖音采集修复
 
-- [ ] 复核 `src/obsidian_ingest/acquire.py`、`src/obsidian_ingest/collectors/douyin.py` 和 `tests/test_collectors.py` 的未提交修改。
-- [ ] 运行采集器与获取层相关测试，确认 UTF-8 输出、文本优先和视频回退行为。
-- [ ] 删除不再需要的根目录 `切换抖音账号.cmd`，避免形成软件外的第二套入口。
-- [ ] 提交为独立中文提交，保留后续账号中心接线的清晰基线。
+- [x] 复核 `src/obsidian_ingest/acquire.py`、`src/obsidian_ingest/collectors/douyin.py` 和 `tests/test_collectors.py` 的未提交修改。
+- [x] 运行采集器与获取层相关测试，确认 UTF-8 输出、文本优先和视频回退行为。
+- [x] 删除不再需要的根目录 `切换抖音账号.cmd`，避免形成软件外的第二套入口。
+- [x] 提交为独立中文提交，保留后续账号中心接线的清晰基线。
 
 ## Task 2：建立账号领域模型与持久化
 
@@ -25,10 +25,10 @@
 - Create: `src/obsidian_ingest/accounts/store.py`
 - Test: `tests/test_accounts_store.py`
 
-- [ ] 先写失败测试，覆盖四个平台枚举、账号增删切换、单平台唯一当前账号、原子写入和损坏文件恢复。
-- [ ] 实现不含明文 Cookie 的 `accounts.json` 元数据结构。
-- [ ] 为每个账号创建独立 `accounts/profiles/<platform>/<account-id>/` 浏览器目录。
-- [ ] 运行账号存储测试并提交。
+- [x] 先写失败测试，覆盖四个平台枚举、账号增删切换、单平台唯一当前账号、原子写入和损坏文件恢复。
+- [x] 实现不含明文 Cookie 的 `accounts.json` 元数据结构。
+- [x] 为每个账号创建独立 `accounts/profiles/<platform>/<account-id>/` 浏览器目录。
+- [x] 运行账号存储测试并提交。
 
 ## Task 3：实现平台身份识别适配器
 
