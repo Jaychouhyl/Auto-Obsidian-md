@@ -87,6 +87,14 @@ class EdgeAccountBrowser:
             finally:
                 context.close()
 
+    def import_cookies(self, profile_dir: Path, cookies: list[dict[str, Any]]) -> None:
+        with self._playwright() as playwright:
+            context = self._launch_context(playwright.chromium, profile_dir, headless=True)
+            try:
+                context.add_cookies(cookies)
+            finally:
+                context.close()
+
     def _launch_context(self, chromium: Any, profile_dir: Path, headless: bool) -> Any:
         if self.edge_executable is None or not self.edge_executable.is_file():
             raise BrowserUnavailableError(

@@ -4,6 +4,9 @@ import argparse
 import json
 from pathlib import Path
 
+from .accounts.models import Platform
+from .accounts.providers.base import AccountIdentityError
+from .accounts.service import AccountService, AccountServiceError, account_to_dict
 from .collectors.directory import collect_directory
 from .collectors.douyin import collect_douyin_favorites
 from .collectors.inbox import collect_inbox
@@ -57,6 +60,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_knowledge_maintenance(args)
     if args.command == "write-launcher":
         return _cmd_write_launcher(args)
+    if args.command == "accounts":
+        return _cmd_accounts(args)
     parser.print_help()
     return 1
 
@@ -156,6 +161,29 @@ def build_parser() -> argparse.ArgumentParser:
     launcher = subparsers.add_parser("write-launcher", help="Create a one-click launcher for the Tauri studio")
     launcher.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
     launcher.add_argument("--json", action="store_true")
+
+    accounts = subparsers.add_parser("accounts", help="Manage platform accounts")
+    account_actions = accounts.add_subparsers(dest="account_action", required=True)
+    for action in ("list", "login", "confirm", "cancel", "switch", "verify", "relogin", "delete", "migrate-douyin"):
+        action_parser = account_actions.add_parser(action)
+        action_parser.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
+        action_parser.add_argument("--json", action="store_true")
+        if action in {"login", "switch"}:
+            action_parser.add_argument("--platform", required=True, choices=[item.value for item in Platform])
+        if action in {"switch", "verify", "relogin", "delete"}:
+            action_parser.add_argument("--account-id", required=True)
+        if action in {"confirm", "cancel"}:
+            action_parser.add_argument("--candidate-id", required=True)
+        if action == "confirm":
+            action_parser.add_argument("--no-switch", action="store_true")
+        if action in {"login", "relogin"}:
+            action_parser.add_argument("--timeout", type=int, default=600)
+        if action == "list":
+            action_parser.add_argument("--platform", choices=[item.value for item in Platform])
+        if action == "migrate-douyin":
+            action_parser.add_argument("--cookies", required=True)
+            action_parser.add_argument("--name", default="")
+            action_parser.add_argument("--user-id", default="")
     return parser
 
 
@@ -448,6 +476,70 @@ pause
     else:
         print(f"Wrote launcher: {launcher}")
     return 0
+
+
+def _cmd_accounts(args: argparse.Namespace) -> int:
+    service = AccountService(Path(args.config).resolve().parent)
+    try:
+        if args.account_action == "list":
+            platform = Platform(args.platform) if args.platform else None
+            payload = {
+                "status": "done",
+                "accounts": [account_to_dict(account) for account in service.list_accounts(platform)],
+            }
+        elif args.account_action == "login":
+            payload = {
+                "status": "candidate",
+                "candidate": service.start_login(Platform(args.platform), timeout_seconds=args.timeout),
+            }
+        elif args.account_action == "confirm":
+            account = service.confirm_login(args.candidate_id, make_current=not args.no_switch)
+            payload = {"status": "done", "account": account_to_dict(account)}
+        elif args.account_action == "cancel":
+            service.cancel_login(args.candidate_id)
+            payload = {"status": "done", "candidate_id": args.candidate_id}
+        elif args.account_action == "switch":
+            account = service.switch_account(Platform(args.platform), args.account_id)
+            payload = {"status": "done", "account": account_to_dict(account)}
+        elif args.account_action == "verify":
+            account = service.verify_account(args.account_id)
+            payload = {"status": "done", "account": account_to_dict(account)}
+        elif args.account_action == "relogin":
+            candidate = service.relogin_account(args.account_id, timeout_seconds=args.timeout)
+            payload = {"status": "candidate", "candidate": candidate}
+        elif args.account_action == "delete":
+            service.delete_account(args.account_id)
+            payload = {"status": "done", "account_id": args.account_id}
+        elif args.account_action == "migrate-douyin":
+            candidate = service.migrate_legacy_douyin(
+                Path(args.cookies),
+                fallback_name=args.name,
+                fallback_user_id=args.user_id,
+            )
+            payload = {"status": "candidate", "candidate": candidate}
+        else:
+            raise AccountServiceError("unsupported_action", f"不支持账号操作: {args.account_action}")
+    except (AccountServiceError, AccountIdentityError) as exc:
+        error = exc.to_dict()
+        payload = {"status": "failed", "error": error}
+        _print_account_payload(payload, args.json)
+        return 1
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        payload = {
+            "status": "failed",
+            "error": {"code": "account_operation_failed", "message": str(exc)},
+        }
+        _print_account_payload(payload, args.json)
+        return 1
+    _print_account_payload(payload, args.json)
+    return 0
+
+
+def _print_account_payload(payload: dict[str, object], json_output: bool) -> None:
+    if json_output:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(json.dumps(payload, ensure_ascii=False))
 
 
 if __name__ == "__main__":
