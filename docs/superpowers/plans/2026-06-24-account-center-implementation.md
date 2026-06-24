@@ -52,12 +52,12 @@
 - Test: `tests/test_account_browser.py`
 - Modify: `pyproject.toml`
 
-- [ ] 先写失败测试，覆盖 Edge 定位、持久 profile 参数、Netscape Cookie 导出和临时文件清理。
-- [ ] 使用系统 Microsoft Edge，不下载 Chromium。
-- [ ] 使用 Playwright persistent context 打开每个账号独立 profile。
-- [ ] 密码和二次验证只在平台网页输入，不进入应用日志或元数据。
-- [ ] 任务运行时导出临时 Cookie 文件，`finally` 中删除。
-- [ ] 增加 Playwright 运行依赖并运行测试。
+- [x] 先写失败测试，覆盖 Edge 定位、持久 profile 参数、Netscape Cookie 导出和临时文件清理。
+- [x] 使用系统 Microsoft Edge，不下载 Chromium。
+- [x] 使用 Playwright persistent context 打开每个账号独立 profile。
+- [x] 密码和二次验证只在平台网页输入，不进入应用日志或元数据。
+- [x] 任务运行时导出临时 Cookie 文件，`finally` 中删除。
+- [x] 增加 Playwright 运行依赖并运行测试。
 
 ## Task 5：实现账号服务、旧账号迁移与 CLI
 
