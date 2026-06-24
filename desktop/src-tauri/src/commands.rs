@@ -4,7 +4,9 @@ use std::fs;
 
 use crate::logs::{recent_logs, LogFile};
 use crate::project::{feeds_txt, links_txt};
-use crate::python_bridge::{config_arg, run_ingest, CommandResult};
+use crate::python_bridge::{
+    config_arg, run_ingest, run_ingest_with_timeout, CommandResult, ACCOUNT_LOGIN_TIMEOUT,
+};
 
 fn command_error(result: &CommandResult) -> String {
     let stderr = result.stderr.trim();
@@ -16,6 +18,22 @@ fn command_error(result: &CommandResult) -> String {
         return stdout.to_string();
     }
     format!("command failed with code {}", result.code)
+}
+
+fn json_result(result: CommandResult) -> Result<Value, String> {
+    if !result.ok {
+        return Err(command_error(&result));
+    }
+    serde_json::from_str(&result.stdout).map_err(|error| error.to_string())
+}
+
+fn run_account_json(args: &[String], long_running: bool) -> Result<Value, String> {
+    let result = if long_running {
+        run_ingest_with_timeout(args, ACCOUNT_LOGIN_TIMEOUT)?
+    } else {
+        run_ingest(args)?
+    };
+    json_result(result)
 }
 
 #[derive(Debug, Deserialize)]
@@ -396,4 +414,135 @@ pub fn write_launcher() -> Result<CommandResult, String> {
 #[tauri::command]
 pub fn list_recent_logs(limit: u32) -> Result<Vec<LogFile>, String> {
     Ok(recent_logs(limit as usize))
+}
+
+#[tauri::command]
+pub fn get_accounts() -> Result<Value, String> {
+    run_account_json(
+        &[
+            "accounts".into(),
+            "list".into(),
+            "--json".into(),
+            "--config".into(),
+            config_arg(),
+        ],
+        false,
+    )
+}
+
+#[tauri::command]
+pub fn start_account_login(platform: String) -> Result<Value, String> {
+    run_account_json(
+        &[
+            "accounts".into(),
+            "login".into(),
+            "--platform".into(),
+            platform,
+            "--timeout".into(),
+            "600".into(),
+            "--json".into(),
+            "--config".into(),
+            config_arg(),
+        ],
+        true,
+    )
+}
+
+#[tauri::command]
+pub fn confirm_account_login(candidate_id: String, make_current: bool) -> Result<Value, String> {
+    let mut args = vec![
+        "accounts".into(),
+        "confirm".into(),
+        "--candidate-id".into(),
+        candidate_id,
+    ];
+    if !make_current {
+        args.push("--no-switch".into());
+    }
+    args.extend(["--json".into(), "--config".into(), config_arg()]);
+    run_account_json(&args, false)
+}
+
+#[tauri::command]
+pub fn cancel_account_login(candidate_id: String) -> Result<Value, String> {
+    run_account_json(
+        &[
+            "accounts".into(),
+            "cancel".into(),
+            "--candidate-id".into(),
+            candidate_id,
+            "--json".into(),
+            "--config".into(),
+            config_arg(),
+        ],
+        false,
+    )
+}
+
+#[tauri::command]
+pub fn switch_account(platform: String, account_id: String) -> Result<Value, String> {
+    run_account_json(
+        &[
+            "accounts".into(),
+            "switch".into(),
+            "--platform".into(),
+            platform,
+            "--account-id".into(),
+            account_id,
+            "--json".into(),
+            "--config".into(),
+            config_arg(),
+        ],
+        false,
+    )
+}
+
+#[tauri::command]
+pub fn verify_account(account_id: String) -> Result<Value, String> {
+    run_account_json(
+        &[
+            "accounts".into(),
+            "verify".into(),
+            "--account-id".into(),
+            account_id,
+            "--json".into(),
+            "--config".into(),
+            config_arg(),
+        ],
+        false,
+    )
+}
+
+#[tauri::command]
+pub fn relogin_account(account_id: String) -> Result<Value, String> {
+    run_account_json(
+        &[
+            "accounts".into(),
+            "relogin".into(),
+            "--account-id".into(),
+            account_id,
+            "--timeout".into(),
+            "600".into(),
+            "--json".into(),
+            "--config".into(),
+            config_arg(),
+        ],
+        true,
+    )
+}
+
+#[tauri::command]
+pub fn delete_account(account_id: String) -> Result<Value, String> {
+    run_account_json(
+        &[
+            "accounts".into(),
+            "delete".into(),
+            "--account-id".into(),
+            account_id,
+            "--json".into(),
+            "--config".into(),
+            config_arg(),
+        ],
+        false,
+    )
 }

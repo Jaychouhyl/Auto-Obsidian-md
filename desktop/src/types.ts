@@ -1,5 +1,36 @@
 export type QueueCounts = Record<string, number>;
 export type QueueStatus = "all" | "pending" | "processing" | "done" | "failed" | "skipped";
+export type AccountPlatform = "douyin" | "bilibili" | "youtube" | "tiktok";
+export type AccountStatus = "active" | "expired" | "unknown" | "error";
+
+export interface AccountProfile {
+  id: string;
+  platform: AccountPlatform;
+  display_name: string;
+  platform_user_id: string;
+  profile_dir: string;
+  status: AccountStatus;
+  created_at: string;
+  updated_at: string;
+  last_verified_at: string;
+  error: string;
+  is_current: boolean;
+}
+
+export interface AccountCandidate {
+  candidate_id: string;
+  platform: AccountPlatform;
+  display_name: string;
+  platform_user_id: string;
+  source_url: string;
+  created_at: string;
+  replaces_account_id?: string;
+}
+
+export interface AccountsPayload {
+  status: string;
+  accounts: AccountProfile[];
+}
 
 export interface StatusPayload {
   paths: {
@@ -105,7 +136,7 @@ export interface LogFile {
 }
 
 export interface AppState {
-  activeView: "setup" | "run" | "sources" | "queue" | "rules" | "logs" | "knowledge" | "updates" | "settings";
+  activeView: "setup" | "run" | "accounts" | "sources" | "queue" | "rules" | "logs" | "knowledge" | "updates" | "settings";
   queueStatus: QueueStatus;
   status: StatusPayload | null;
   configDraft: AppConfigDraft | null;
@@ -113,6 +144,8 @@ export interface AppState {
   doctor: DoctorReport | null;
   queue: QueueItem[];
   logs: LogFile[];
+  accounts: AccountProfile[];
+  accountCandidate: AccountCandidate | null;
   busy: boolean;
   message: string;
   error: string;

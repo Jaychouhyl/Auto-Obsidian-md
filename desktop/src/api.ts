@@ -1,5 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AccountCandidate,
+  AccountPlatform,
+  AccountProfile,
+  AccountsPayload,
   AppConfigDraft,
   CommandResult,
   DoctorReport,
@@ -97,4 +101,42 @@ export async function writeLauncher(): Promise<CommandResult> {
 
 export async function listRecentLogs(limit = 20): Promise<LogFile[]> {
   return invoke<LogFile[]>("list_recent_logs", { limit });
+}
+
+export async function getAccounts(): Promise<AccountsPayload> {
+  return invoke<AccountsPayload>("get_accounts");
+}
+
+export async function startAccountLogin(platform: AccountPlatform): Promise<{ status: string; candidate: AccountCandidate }> {
+  return invoke("start_account_login", { platform });
+}
+
+export async function confirmAccountLogin(
+  candidateId: string,
+  makeCurrent: boolean,
+): Promise<{ status: string; account: AccountProfile }> {
+  return invoke("confirm_account_login", { candidateId, makeCurrent });
+}
+
+export async function cancelAccountLogin(candidateId: string): Promise<{ status: string }> {
+  return invoke("cancel_account_login", { candidateId });
+}
+
+export async function switchAccount(
+  platform: AccountPlatform,
+  accountId: string,
+): Promise<{ status: string; account: AccountProfile }> {
+  return invoke("switch_account", { platform, accountId });
+}
+
+export async function verifyAccount(accountId: string): Promise<{ status: string; account: AccountProfile }> {
+  return invoke("verify_account", { accountId });
+}
+
+export async function reloginAccount(accountId: string): Promise<{ status: string; candidate: AccountCandidate }> {
+  return invoke("relogin_account", { accountId });
+}
+
+export async function deleteAccount(accountId: string): Promise<{ status: string }> {
+  return invoke("delete_account", { accountId });
 }

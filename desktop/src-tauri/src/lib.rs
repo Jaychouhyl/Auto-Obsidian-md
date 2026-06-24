@@ -29,7 +29,15 @@ pub fn run() {
             commands::skip_item,
             commands::knowledge_maintenance,
             commands::write_launcher,
-            commands::list_recent_logs
+            commands::list_recent_logs,
+            commands::get_accounts,
+            commands::start_account_login,
+            commands::confirm_account_login,
+            commands::cancel_account_login,
+            commands::switch_account,
+            commands::verify_account,
+            commands::relogin_account,
+            commands::delete_account
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

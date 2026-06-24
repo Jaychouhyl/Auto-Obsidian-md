@@ -12,6 +12,8 @@ export const state: AppState = {
   doctor: null,
   queue: [],
   logs: [],
+  accounts: [],
+  accountCandidate: null,
   busy: false,
   message: "",
   error: "",

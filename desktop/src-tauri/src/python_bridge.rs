@@ -14,8 +14,16 @@ pub struct CommandResult {
 }
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(180);
+pub const ACCOUNT_LOGIN_TIMEOUT: Duration = Duration::from_secs(660);
 
 pub fn run_ingest(args: &[String]) -> Result<CommandResult, String> {
+    run_ingest_with_timeout(args, COMMAND_TIMEOUT)
+}
+
+pub fn run_ingest_with_timeout(
+    args: &[String],
+    timeout: Duration,
+) -> Result<CommandResult, String> {
     let workspace = project_root();
     let mut command = if let Some(backend) = backend_exe() {
         Command::new(backend)
@@ -60,7 +68,7 @@ pub fn run_ingest(args: &[String]) -> Result<CommandResult, String> {
             .map_err(|error| format!("failed to poll ingest command: {error}"))?
         {
             Some(_) => break,
-            None if started_at.elapsed() >= COMMAND_TIMEOUT => {
+            None if started_at.elapsed() >= timeout => {
                 let _ = child.kill();
                 let _ = child.wait();
                 return Ok(CommandResult {
@@ -69,7 +77,7 @@ pub fn run_ingest(args: &[String]) -> Result<CommandResult, String> {
                     stdout: String::new(),
                     stderr: format!(
                         "ingest command timed out after {} seconds",
-                        COMMAND_TIMEOUT.as_secs()
+                        timeout.as_secs()
                     ),
                 });
             }

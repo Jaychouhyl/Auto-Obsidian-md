@@ -149,7 +149,10 @@ h2 {
 .settings,
 .message,
 .error,
-.doctor-row {
+.doctor-row,
+.account-platform,
+.account-candidate,
+.account-summary {
   background: #ffffff;
   border: 1px solid #d3d8dc;
   border-radius: 8px;
@@ -386,6 +389,121 @@ th {
   color: #687580;
 }
 
+.account-platforms {
+  display: grid;
+  gap: 12px;
+}
+
+.account-platform {
+  padding: 0;
+  overflow: hidden;
+}
+
+.account-platform-head,
+.account-row,
+.account-candidate,
+.account-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.account-platform-head {
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #f7f8f9;
+  border-bottom: 1px solid #e0e4e7;
+}
+
+.account-platform-head h2 {
+  margin: 0;
+}
+
+.account-platform-head span,
+.account-identity > span,
+.account-identity small,
+.account-summary span,
+.account-candidate p,
+.candidate-label {
+  color: #687580;
+  font-size: 13px;
+}
+
+.account-row {
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e8ebed;
+}
+
+.account-row:last-child {
+  border-bottom: 0;
+}
+
+.account-identity {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.account-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-empty {
+  padding: 18px 16px;
+  color: #687580;
+}
+
+.badge.current {
+  background: #d8efec;
+  color: #075d57;
+}
+
+.badge.active {
+  background: #dff3e8;
+  color: #0f5b36;
+}
+
+.badge.expired,
+.badge.error {
+  background: #f8dddd;
+  color: #8a1f1f;
+}
+
+.account-candidate {
+  justify-content: space-between;
+  margin-top: 16px;
+  border-color: #77bdb5;
+}
+
+.account-candidate h2,
+.account-candidate p {
+  margin: 4px 0 0;
+}
+
+.candidate-label {
+  text-transform: uppercase;
+}
+
+.account-summary {
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+}
+
+.account-summary > div {
+  display: grid;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.account-summary button {
+  margin-left: auto;
+}
+
 .banner {
   margin: 0 0 16px;
   padding: 12px 14px;
@@ -464,5 +582,17 @@ th {
 
   .log-row {
     grid-template-columns: 1fr;
+  }
+
+  .account-platform-head,
+  .account-row,
+  .account-candidate,
+  .account-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-summary button {
+    margin-left: 0;
   }
 }

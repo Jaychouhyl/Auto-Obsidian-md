@@ -9,6 +9,9 @@ pub fn project_root() -> PathBuf {
 }
 
 pub fn backend_exe() -> Option<PathBuf> {
+    if cfg!(debug_assertions) {
+        return None;
+    }
     let names = [
         "obsidian-ingest-backend.exe",
         "obsidian-ingest-backend-x86_64-pc-windows-msvc.exe",

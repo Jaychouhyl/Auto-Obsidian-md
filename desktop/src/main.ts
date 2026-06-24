@@ -1,10 +1,14 @@
 import "./styles.css";
 import { getVersion } from "@tauri-apps/api/app";
 import {
+  cancelAccountLogin,
   clipWebpage,
   collectPlatformList,
   collectRss,
   collectDouyin,
+  confirmAccountLogin,
+  deleteAccount,
+  getAccounts,
   getQueue,
   getSourceFiles,
   getStatus,
@@ -12,6 +16,7 @@ import {
   knowledgeMaintenance,
   listRecentLogs,
   processQueue,
+  reloginAccount,
   retryFailed,
   retryItem,
   runDoctor,
@@ -21,10 +26,20 @@ import {
   scanDirectory,
   scanInbox,
   skipItem,
+  startAccountLogin,
+  switchAccount,
+  verifyAccount,
   writeLauncher,
 } from "./api";
 import { state, setBusy, setError, setMessage } from "./state";
-import type { AppConfigDraft, CommandResult, QueueStatus, StatusPayload } from "./types";
+import type {
+  AccountPlatform,
+  AccountProfile,
+  AppConfigDraft,
+  CommandResult,
+  QueueStatus,
+  StatusPayload,
+} from "./types";
 
 const appRoot = document.querySelector<HTMLDivElement>("#app");
 
@@ -42,6 +57,7 @@ async function refresh(): Promise<void> {
     state.sourceFiles = await getSourceFiles();
     state.queue = await getQueue(80, state.queueStatus);
     state.logs = await listRecentLogs(30);
+    state.accounts = (await getAccounts()).accounts;
   } catch (error) {
     setError(error instanceof Error ? error.message : String(error));
   }
@@ -124,6 +140,7 @@ async function reloadData(): Promise<void> {
   state.sourceFiles = await getSourceFiles();
   state.queue = await getQueue(80, state.queueStatus);
   state.logs = await listRecentLogs(30);
+  state.accounts = (await getAccounts()).accounts;
 }
 
 function numberFromInput(id: string, fallback: number, min: number, max: number): number | null {
@@ -218,6 +235,95 @@ async function handleDouyin(): Promise<void> {
     if (!collect.ok) return collect;
     return processQueue(count);
   });
+}
+
+async function runAccountAction(label: string, action: () => Promise<void>): Promise<void> {
+  setBusy(true);
+  setMessage(`${label} 处理中...`);
+  render();
+  try {
+    await action();
+    setMessage(`${label} 完成`);
+  } catch (error) {
+    setError(readableError(error));
+  } finally {
+    try {
+      state.accounts = (await getAccounts()).accounts;
+    } catch {
+      // 保留原错误，账号列表可由“刷新”重新加载
+    }
+    setBusy(false);
+    render();
+  }
+}
+
+async function handleAddAccount(platform: AccountPlatform): Promise<void> {
+  await runAccountAction("登录账号", async () => {
+    setMessage("Edge 登录窗口已打开，等待平台登录完成...");
+    render();
+    const payload = await startAccountLogin(platform);
+    state.accountCandidate = payload.candidate;
+    setMessage(`已识别账号：${payload.candidate.display_name}`);
+  });
+}
+
+async function handleConfirmAccount(makeCurrent: boolean): Promise<void> {
+  const candidate = state.accountCandidate;
+  if (!candidate) return;
+  await runAccountAction("保存账号", async () => {
+    await confirmAccountLogin(candidate.candidate_id, makeCurrent);
+    state.accountCandidate = null;
+  });
+}
+
+async function handleCancelAccount(): Promise<void> {
+  const candidate = state.accountCandidate;
+  if (!candidate) return;
+  await runAccountAction("取消登录", async () => {
+    await cancelAccountLogin(candidate.candidate_id);
+    state.accountCandidate = null;
+  });
+}
+
+async function handleSwitchAccount(platform: AccountPlatform, accountId: string): Promise<void> {
+  await runAccountAction("切换账号", async () => {
+    await switchAccount(platform, accountId);
+  });
+}
+
+async function handleVerifyAccount(accountId: string): Promise<void> {
+  await runAccountAction("校验账号", async () => {
+    const payload = await verifyAccount(accountId);
+    if (payload.account.status !== "active") {
+      throw new Error(payload.account.error || "账号登录态已失效，请重新登录。");
+    }
+  });
+}
+
+async function handleReloginAccount(accountId: string): Promise<void> {
+  await runAccountAction("重新登录", async () => {
+    setMessage("Edge 登录窗口已打开，等待平台登录完成...");
+    render();
+    const payload = await reloginAccount(accountId);
+    state.accountCandidate = payload.candidate;
+  });
+}
+
+async function handleDeleteAccount(accountId: string, displayName: string): Promise<void> {
+  if (!window.confirm(`删除账号“${displayName}”及其本机登录资料？`)) return;
+  await runAccountAction("删除账号", async () => {
+    await deleteAccount(accountId);
+  });
+}
+
+function readableError(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  try {
+    const parsed = JSON.parse(text) as { error?: { message?: string } };
+    return parsed.error?.message || text;
+  } catch {
+    return text;
+  }
 }
 
 async function handleDirectoryScan(): Promise<void> {
@@ -348,6 +454,7 @@ function renderNav(): string {
   const items: Array<[typeof state.activeView, string]> = [
     ["setup", "配置"],
     ["run", "运行"],
+    ["accounts", "账号"],
     ["sources", "导入"],
     ["queue", "队列"],
     ["rules", "规则"],
@@ -367,6 +474,7 @@ function renderNav(): string {
 function renderView(): string {
   if (state.activeView === "setup") return renderSetupView();
   if (state.activeView === "run") return renderRunView();
+  if (state.activeView === "accounts") return renderAccountsView();
   if (state.activeView === "sources") return renderSourcesView();
   if (state.activeView === "queue") return renderQueueView();
   if (state.activeView === "rules") return renderRulesView();
@@ -417,6 +525,7 @@ function renderRunView(): string {
         <div class="stat"><b>${counts.done ?? 0}</b><span>已完成</span></div>
         <div class="stat"><b>${counts.failed ?? 0}</b><span>失败</span></div>
       </div>
+      ${renderAccountSummary(["douyin"])}
       <div class="control-band">
         ${field("处理数量", "process-limit", "10", "number")}
         <button id="process-queue" ${disabledAttr()}>处理队列</button>
@@ -431,6 +540,112 @@ function renderRunView(): string {
   `;
 }
 
+const PlatformDefinition: Record<AccountPlatform, { label: string; short: string }> = {
+  douyin: { label: "抖音", short: "抖音收藏" },
+  bilibili: { label: "哔哩哔哩", short: "B站列表" },
+  youtube: { label: "YouTube", short: "YouTube 列表" },
+  tiktok: { label: "TikTok", short: "TikTok 内容" },
+};
+
+function renderAccountsView(): string {
+  const platforms = Object.keys(PlatformDefinition) as AccountPlatform[];
+  return `
+    <section class="view">
+      <div class="view-header">
+        <h1>账号</h1>
+        <button id="refresh" ${disabledAttr()}>刷新</button>
+      </div>
+      <div class="account-platforms">
+        ${platforms.map(renderAccountPlatform).join("")}
+      </div>
+      ${renderAccountCandidate()}
+      ${renderMessageArea()}
+    </section>
+  `;
+}
+
+function renderAccountPlatform(platform: AccountPlatform): string {
+  const definition = PlatformDefinition[platform];
+  const accounts = state.accounts.filter((account) => account.platform === platform);
+  return `
+    <section class="account-platform">
+      <div class="account-platform-head">
+        <div>
+          <h2>${escapeHtml(definition.label)}</h2>
+          <span>${accounts.length} 个账号</span>
+        </div>
+        <button data-add-account="${platform}" ${disabledAttr()}>添加账号</button>
+      </div>
+      <div class="account-rows">
+        ${
+          accounts.length
+            ? accounts.map(renderAccountRow).join("")
+            : '<div class="account-empty">尚未添加账号</div>'
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderAccountRow(account: AccountProfile): string {
+  const statusLabel = account.status === "active" ? "可用" : account.status === "expired" ? "已失效" : "待校验";
+  return `
+    <div class="account-row">
+      <div class="account-identity">
+        <div class="account-name">
+          <b>${escapeHtml(account.display_name)}</b>
+          ${account.is_current ? '<span class="badge current">当前</span>' : ""}
+          <span class="badge ${escapeAttr(account.status)}">${statusLabel}</span>
+        </div>
+        <span>${escapeHtml(account.platform_user_id)}</span>
+        ${account.error ? `<small>${escapeHtml(account.error)}</small>` : ""}
+      </div>
+      <div class="row-actions">
+        ${account.is_current ? "" : `<button data-switch-account="${account.id}" data-platform="${account.platform}" ${disabledAttr()}>切换</button>`}
+        <button data-verify-account="${account.id}" ${disabledAttr()}>校验</button>
+        <button data-relogin-account="${account.id}" ${disabledAttr()}>重新登录</button>
+        <button data-delete-account="${account.id}" data-account-name="${escapeAttr(account.display_name)}" ${disabledAttr()}>删除</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderAccountCandidate(): string {
+  const candidate = state.accountCandidate;
+  if (!candidate) return "";
+  return `
+    <section class="account-candidate">
+      <div>
+        <span class="candidate-label">检测到新账号</span>
+        <h2>${escapeHtml(candidate.display_name)}</h2>
+        <p>${escapeHtml(PlatformDefinition[candidate.platform].label)} · ${escapeHtml(candidate.platform_user_id)}</p>
+      </div>
+      <div class="toolbar">
+        <button id="confirm-account-current" ${disabledAttr()}>保存并切换</button>
+        <button id="confirm-account-only" ${disabledAttr()}>仅保存</button>
+        <button id="cancel-account" ${disabledAttr()}>取消</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderAccountSummary(platforms: AccountPlatform[]): string {
+  return `
+    <div class="account-summary">
+      ${platforms
+        .map((platform) => {
+          const account = state.accounts.find((item) => item.platform === platform && item.is_current);
+          const stateText = account
+            ? `${account.display_name} · ${account.status === "active" ? "可用" : "需重新登录"}`
+            : "未设置";
+          return `<div><span>${escapeHtml(PlatformDefinition[platform].short)}</span><b>${escapeHtml(stateText)}</b></div>`;
+        })
+        .join("")}
+      <button data-view="accounts">管理账号</button>
+    </div>
+  `;
+}
+
 function renderSourcesView(): string {
   return `
     <section class="view">
@@ -438,6 +653,7 @@ function renderSourcesView(): string {
         <h1>导入</h1>
         <button id="save-sources" ${disabledAttr()}>保存来源</button>
       </div>
+      ${renderAccountSummary(["bilibili", "youtube", "tiktok"])}
       <div class="split">
         <div class="panel">
           <h2>链接</h2>
@@ -458,7 +674,7 @@ function renderSourcesView(): string {
         <button id="clip-webpage" ${disabledAttr()}>网页剪藏</button>
         ${field("目录路径", "directory-path", "D:\\Downloads")}
         <button id="run-directory" ${disabledAttr()}>扫描目录</button>
-        ${selectField("平台", "platform-kind", [["auto", "自动"], ["youtube", "YouTube"], ["bilibili", "B站"]])}
+        ${selectField("平台", "platform-kind", [["auto", "自动"], ["youtube", "YouTube"], ["bilibili", "B站"], ["tiktok", "TikTok"]])}
         ${field("列表链接", "platform-url", "")}
         ${field("列表数量", "platform-limit", "20", "number")}
         <button id="run-platform-list" ${disabledAttr()}>导入列表</button>
@@ -731,6 +947,40 @@ function bindEvents(): void {
   document.querySelector<HTMLButtonElement>("#dismiss-banner")?.addEventListener("click", () => {
     state.bannerDismissed = true;
     render();
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-add-account]").forEach((button) => {
+    button.addEventListener("click", () => void handleAddAccount(button.dataset.addAccount as AccountPlatform));
+  });
+  document.querySelector<HTMLButtonElement>("#confirm-account-current")?.addEventListener("click", () => {
+    void handleConfirmAccount(true);
+  });
+  document.querySelector<HTMLButtonElement>("#confirm-account-only")?.addEventListener("click", () => {
+    void handleConfirmAccount(false);
+  });
+  document.querySelector<HTMLButtonElement>("#cancel-account")?.addEventListener("click", () => {
+    void handleCancelAccount();
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-switch-account]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void handleSwitchAccount(
+        button.dataset.platform as AccountPlatform,
+        button.dataset.switchAccount ?? "",
+      );
+    });
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-verify-account]").forEach((button) => {
+    button.addEventListener("click", () => void handleVerifyAccount(button.dataset.verifyAccount ?? ""));
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-relogin-account]").forEach((button) => {
+    button.addEventListener("click", () => void handleReloginAccount(button.dataset.reloginAccount ?? ""));
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-delete-account]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void handleDeleteAccount(
+        button.dataset.deleteAccount ?? "",
+        button.dataset.accountName ?? "",
+      );
+    });
   });
   document.querySelectorAll<HTMLButtonElement>("[data-retry-id]").forEach((button) => {
     button.addEventListener("click", () => void handleRetryItem(Number.parseInt(button.dataset.retryId ?? "0", 10)));
