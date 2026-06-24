@@ -7,10 +7,13 @@
 3. 在“配置”页填写 Obsidian vault 路径。
 4. 填写 DeepSeek / OpenAI-compatible 服务地址、模型和 API Key。
 5. 点击“保存”，再点击“健康检查”。
+6. 打开“账号”页，按需添加抖音、哔哩哔哩、YouTube 或 TikTok 账号。
 
 ## 普通用户依赖
 
 只使用 Windows 安装包时，不需要安装 Python、Node.js 或 Rust。
+
+账号登录会打开系统 Microsoft Edge。软件不会读取或保存密码；登录态由 Edge profile 保护。
 
 可选依赖：
 
@@ -40,6 +43,7 @@ feeds.txt
 data/
 cache/
 logs/
+accounts/
 ```
 
 ## 常用入口
@@ -57,3 +61,8 @@ cd <项目目录>
 .\run.ps1 doctor --config .\config.toml
 .\run.ps1 queue --json --config .\config.toml
 ```
+
+---
+
+自动化写的
+署名：小黄狗

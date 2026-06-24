@@ -41,6 +41,8 @@ $PyInstallerArgs = @(
     $Name
     "--paths"
     (Join-Path $ProjectRoot "src")
+    "--collect-all"
+    "playwright"
     "--distpath"
     $BinaryDir
     "--workpath"

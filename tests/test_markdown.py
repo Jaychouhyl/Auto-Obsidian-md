@@ -120,6 +120,26 @@ class MarkdownRenderingTest(unittest.TestCase):
         self.assertIn("status: inbox", rendered)
         self.assertNotIn("待补来源", rendered)
 
+    def test_generated_note_contains_attribution(self):
+        item = QueueItem(
+            id=6,
+            url="https://example.com/signed",
+            title="署名笔记",
+            platform="web",
+            content_type="article",
+            status="pending",
+            created_at="2026-06-03T10:00:00",
+            updated_at="2026-06-03T10:00:00",
+            metadata={},
+            note_path=None,
+            error=None,
+        )
+
+        rendered = render_markdown_note(item, NotePayload(summary="x"))
+
+        self.assertIn("自动化写的", rendered)
+        self.assertIn("署名：小黄狗", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

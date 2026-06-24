@@ -136,11 +136,11 @@
 - Modify: `README.md`
 - Modify: user guide Markdown
 
-- [ ] 将软件版本统一更新为 `0.4.0`。
-- [ ] PyInstaller 收集 Playwright Python 运行文件，但继续使用系统 Edge。
-- [ ] Windows 发布工作流安装完整项目依赖、构建 sidecar、Tauri 安装包并上传 Release。
-- [ ] 更新安装、首次启动、账号切换、采集和故障排查说明。
-- [ ] 所有新增说明文档加入 `自动化写的 / 署名：小黄狗`。
+- [x] 将软件版本统一更新为 `0.4.0`。
+- [x] PyInstaller 收集 Playwright Python 运行文件，但继续使用系统 Edge。
+- [x] Windows 发布工作流安装完整项目依赖、构建 sidecar、Tauri 安装包并上传 Release。
+- [x] 更新安装、首次启动、账号切换、采集和故障排查说明。
+- [x] 所有新增说明文档与生成笔记模板加入 `自动化写的 / 署名：小黄狗`。
 
 ## Task 10：完整自动化与真实回归
 

@@ -482,6 +482,7 @@ def _cmd_accounts(args: argparse.Namespace) -> int:
     service = AccountService(Path(args.config).resolve().parent)
     try:
         if args.account_action == "list":
+            service.auto_migrate_legacy_douyin()
             platform = Platform(args.platform) if args.platform else None
             payload = {
                 "status": "done",

@@ -12,6 +12,7 @@
 - 写入方式：直接写入本地 Obsidian vault，或接 Obsidian Local REST API。
 - 队列维护：查看状态、重试失败项、跳过条目。
 - 桌面控制台：Tauri 本机应用，调用同一套 Python pipeline。
+- 统一账号中心：在软件内管理抖音、哔哩哔哩、YouTube、TikTok 多账号，并选择各平台当前账号。
 - Docker：提供可选的 CLI 容器运行方式。
 
 ## 目录结构
@@ -28,6 +29,7 @@ config.example.toml      本机配置模板
 config.docker.toml       Docker 配置模板
 INSTALL.md               安装说明
 RELEASE.md               发布清单
+使用说明.md              普通用户完整操作说明
 ```
 
 ## 本机快速开始
@@ -79,6 +81,14 @@ py -3 -m unittest discover -s tests -v
 ## 桌面控制台
 
 普通用户直接下载 Release 里的 Windows 安装包即可，不需要安装 Python、Node.js 或 Rust。安装后，桌面端会在当前 Windows 用户的 AppData 目录创建工作区，并把配置、队列、缓存和导入文件放在那里。
+
+账号登录使用电脑上已有的 Microsoft Edge。每个账号使用独立浏览器资料目录；密码和验证码只在平台网页输入，不会写入项目配置。账号元数据和登录态位于：
+
+```text
+%LOCALAPPDATA%\Obsidian Ingest Studio\accounts
+```
+
+在桌面端点击“账号”，选择平台后点击“添加账号”。登录完成后，软件会显示识别到的昵称和平台 ID，确认后才保存或切换。
 
 ### 处理功能的前置依赖（重要）
 
@@ -176,6 +186,7 @@ INSTALL_WHISPER=true
 
 - `config.toml` 是本机私有配置，不提交。
 - `douyin-config.yml` 可能包含 Cookie，不提交。
+- `accounts/` 包含本机账号登录资料，不提交。
 - `links.txt`、`feeds.txt` 可能包含个人资料来源，不提交。
 - DeepSeek 或其他 LLM Key 通过环境变量提供。
 - 私有 B站/YouTube 收藏需要有效登录态或先导出链接。
@@ -194,3 +205,8 @@ cd .\src-tauri
 $env:Path="$env:USERPROFILE\.cargo\bin;$env:Path"
 cargo check
 ```
+
+---
+
+自动化写的
+署名：小黄狗

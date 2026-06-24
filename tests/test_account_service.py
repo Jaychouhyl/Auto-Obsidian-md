@@ -93,6 +93,27 @@ class AccountServiceTest(unittest.TestCase):
             self.assertTrue(all(float(item["expires"]) > 0 for item in browser.imports[0][1]))
             self.assertTrue((root / "accounts" / "legacy-backups" / ".cookies.json").exists())
 
+    def test_auto_migrates_legacy_douyin_once_when_account_list_is_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".cookies.json").write_text(
+                json.dumps({"sessionid": "secret"}),
+                encoding="utf-8",
+            )
+            service = AccountService(root, browser=FakeBrowser())
+
+            migrated = service.auto_migrate_legacy_douyin()
+            repeated = service.auto_migrate_legacy_douyin()
+
+            self.assertIsNotNone(migrated)
+            self.assertTrue(migrated.is_current)
+            self.assertEqual(migrated.display_name, "忆霖")
+            self.assertIsNone(repeated)
+            marker = json.loads(
+                (root / "accounts" / "legacy-migration.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(marker["status"], "complete")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,7 +3,7 @@
 ## 发布前
 
 - `python -m unittest discover -s tests -v`
-- `python -m pip install pyinstaller`
+- `python -m pip install . pyinstaller`
 - `.\packaging\build-sidecar.ps1`
 - `npm run build` in `desktop`
 - `cargo check` in `desktop/src-tauri`
@@ -30,9 +30,9 @@ desktop/src-tauri/target/release/bundle/nsis/
 ## GitHub Release
 
 ```powershell
-git tag -a v0.03 -m "发布 v0.03"
+git tag -a v0.04 -m "发布 v0.04"
 git push origin main
-git push origin v0.03
+git push origin v0.04
 ```
 
 推送 `v*` tag 后，GitHub Actions 会构建 Windows 安装包并发布到 Releases。
@@ -43,3 +43,9 @@ git push origin v0.03
 - 在干净目录安装并启动桌面端。
 - 完成配置保存和健康检查。
 - 导入 1 条网页链接并确认 Obsidian vault 生成 Markdown。
+- 在“账号”页确认抖音旧账号迁移、校验和当前账号显示正常。
+
+---
+
+自动化写的
+署名：小黄狗

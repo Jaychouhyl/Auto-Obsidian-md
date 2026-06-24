@@ -140,8 +140,8 @@ class AccountService:
         cookies = load_legacy_douyin_cookies(cookie_source)
         candidate_id = uuid.uuid4().hex
         profile_dir = self.store.profile_dir(Platform.DOUYIN, f"pending-{candidate_id}")
-        self.browser.import_cookies(profile_dir, cookies)
         try:
+            self.browser.import_cookies(profile_dir, cookies)
             identity = self.browser.verify(profile_dir, provider_for(Platform.DOUYIN))
             display_name = identity.display_name
             user_id = identity.platform_user_id
@@ -153,6 +153,9 @@ class AccountService:
             display_name = fallback_name
             user_id = fallback_user_id
             source_url = provider_for(Platform.DOUYIN).identity_url
+        except Exception:
+            shutil.rmtree(profile_dir, ignore_errors=True)
+            raise
         backup_legacy_file(cookie_source, self.store.accounts_dir / "legacy-backups")
         payload = {
             "candidate_id": candidate_id,
@@ -166,6 +169,50 @@ class AccountService:
         }
         self._write_candidate(candidate_id, payload)
         return payload
+
+    def auto_migrate_legacy_douyin(self) -> AccountProfile | None:
+        if self.store.list(Platform.DOUYIN):
+            return None
+        marker = self.store.accounts_dir / "legacy-migration.json"
+        if marker.exists():
+            return None
+        source = next(
+            (
+                path
+                for path in (
+                    self.project_root / ".cookies.json",
+                    self.project_root / "douyin-config.yml",
+                )
+                if path.exists()
+            ),
+            None,
+        )
+        if source is None:
+            return None
+        try:
+            candidate = self.migrate_legacy_douyin(source)
+            account = self.confirm_login(candidate["candidate_id"], make_current=True)
+            self._write_json(
+                marker,
+                {
+                    "status": "complete",
+                    "account_id": account.id,
+                    "source": source.name,
+                    "updated_at": _now(),
+                },
+            )
+            return account
+        except Exception as exc:
+            self._write_json(
+                marker,
+                {
+                    "status": "failed",
+                    "source": source.name,
+                    "error": str(exc),
+                    "updated_at": _now(),
+                },
+            )
+            return None
 
     def candidate_path(self, candidate_id: str) -> Path:
         return self.candidates_dir / f"{_safe_candidate_id(candidate_id)}.json"
@@ -181,7 +228,10 @@ class AccountService:
         return account
 
     def _write_candidate(self, candidate_id: str, payload: dict[str, Any]) -> None:
-        path = self.candidate_path(candidate_id)
+        self._write_json(self.candidate_path(candidate_id), payload)
+
+    @staticmethod
+    def _write_json(path: Path, payload: dict[str, Any]) -> None:
         temporary = path.with_suffix(".json.tmp")
         temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         temporary.replace(path)

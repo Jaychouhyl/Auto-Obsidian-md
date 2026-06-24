@@ -51,7 +51,16 @@ def render_markdown_note(item: QueueItem, payload: NotePayload) -> str:
     lines.append("```text")
     lines.append(payload.transcript.strip() or "暂无转写。")
     lines.append("```")
-    lines.append("")
+    lines.extend(
+        [
+            "",
+            "---",
+            "",
+            "> 自动化写的",
+            "> 署名：小黄狗",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
