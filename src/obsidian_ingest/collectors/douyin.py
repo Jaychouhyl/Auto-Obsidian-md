@@ -44,10 +44,23 @@ def copy_config_with_collect_count(source: Path, target: Path, count: int) -> No
     target.write_text(text, encoding="utf-8")
 
 
-def discover_douyin_text_exports(download_dir: Path) -> list[Path]:
+DOUYIN_CONTENT_EXTENSIONS = (".txt", ".mp4")
+
+
+def discover_douyin_exports(download_dir: Path) -> list[Path]:
+    """每条视频挑一个内容文件入队：同名的文本(.txt)优先于视频(.mp4)，忽略封面/音乐；同一文件夹内的多条(如 live_1/live_2)各自保留。"""
     if not download_dir.exists():
         return []
-    return sorted(download_dir.rglob("*.txt"), key=lambda path: str(path).lower())
+    by_stem: dict[Path, Path] = {}
+    for path in sorted(download_dir.rglob("*"), key=lambda item: str(item).lower()):
+        suffix = path.suffix.lower()
+        if suffix not in DOUYIN_CONTENT_EXTENSIONS:
+            continue
+        key = path.with_suffix("")  # 同名不同扩展(.mp4/.txt)视作同一条视频
+        chosen = by_stem.get(key)
+        if chosen is None or (chosen.suffix.lower() == ".mp4" and suffix == ".txt"):
+            by_stem[key] = path
+    return sorted(by_stem.values(), key=lambda item: str(item).lower())
 
 
 def collect_douyin_favorites(config: AppConfig, count: int) -> DouyinCollectionResult:
@@ -74,14 +87,14 @@ def collect_douyin_favorites(config: AppConfig, count: int) -> DouyinCollectionR
         "-c",
         str(run_config),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     if completed.returncode != 0:
         message = completed.stderr.strip() or completed.stdout.strip() or "douyin collector failed"
         raise RuntimeError(message)
 
     store = QueueStore(config.paths.queue_db)
     queued_files: list[str] = []
-    for path in discover_douyin_text_exports(run_dir):
+    for path in discover_douyin_exports(run_dir):
         store.enqueue(
             str(path),
             title=path.stem,

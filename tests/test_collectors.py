@@ -7,7 +7,7 @@ from pathlib import Path
 from obsidian_ingest.collectors.douyin import (
     build_douyin_favorites_url,
     copy_config_with_collect_count,
-    discover_douyin_text_exports,
+    discover_douyin_exports,
 )
 from obsidian_ingest.collectors.inbox import SUPPORTED_INBOX_EXTENSIONS, scan_inbox_files
 
@@ -34,7 +34,7 @@ class DouyinCollectorTest(unittest.TestCase):
             self.assertIn("  collect: 7", text)
             self.assertIn("  like: 0", text)
 
-    def test_discovers_text_exports(self) -> None:
+    def test_prefers_text_export_over_video(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             nested = root / "collect" / "video-a"
@@ -42,9 +42,37 @@ class DouyinCollectorTest(unittest.TestCase):
             (nested / "video-a.txt").write_text("hello", encoding="utf-8")
             (nested / "video-a.mp4").write_text("binary", encoding="utf-8")
 
-            exports = discover_douyin_text_exports(root)
+            exports = discover_douyin_exports(root)
 
             self.assertEqual([path.name for path in exports], ["video-a.txt"])
+
+    def test_falls_back_to_video_when_no_text(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            nested = root / "collect" / "video-b"
+            nested.mkdir(parents=True)
+            (nested / "video-b.mp4").write_text("binary", encoding="utf-8")
+            (nested / "video-b_music.mp3").write_text("noise", encoding="utf-8")
+            (nested / "video-b_cover.jpg").write_text("img", encoding="utf-8")
+
+            exports = discover_douyin_exports(root)
+
+            self.assertEqual([path.name for path in exports], ["video-b.mp4"])
+
+    def test_keeps_separate_videos_in_same_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            nested = root / "collect" / "live-post"
+            nested.mkdir(parents=True)
+            (nested / "post_live_1.mp4").write_text("v1", encoding="utf-8")
+            (nested / "post_live_2.mp4").write_text("v2", encoding="utf-8")
+
+            exports = discover_douyin_exports(root)
+
+            self.assertEqual(
+                [path.name for path in exports],
+                ["post_live_1.mp4", "post_live_2.mp4"],
+            )
 
 
 class InboxCollectorTest(unittest.TestCase):

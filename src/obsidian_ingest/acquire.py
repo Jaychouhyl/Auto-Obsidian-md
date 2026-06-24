@@ -114,7 +114,7 @@ def acquire_source(
         raise FileNotFoundError(f"Missing acquisition tool for platform {request.platform}: {executable}")
 
     before = set(request.output_dir.glob("*"))
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     if completed.returncode != 0:
         return AcquisitionResult(
             status="failed",
