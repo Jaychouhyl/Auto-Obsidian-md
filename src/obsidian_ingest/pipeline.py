@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 from dataclasses import dataclass
+from pathlib import Path
 
+from .accounts.models import Platform
+from .accounts.runtime import current_account_cookie_file, current_account_cookies
+from .collectors.douyin import copy_config_with_account
 from .acquire import AcquisitionRequest, acquire_source
 from .config import AppConfig
 from .markdown import NotePayload, render_markdown_note
@@ -31,13 +36,39 @@ def process_item(config: AppConfig, store: QueueStore, item: QueueItem) -> Pipel
     try:
         store.mark_processing(item.id)
         item_cache = config.paths.cache_dir / f"item-{item.id}"
-        acquired = acquire_source(
-            AcquisitionRequest(item.url, item.platform, item_cache, item.title),
-            yt_dlp_cmd=config.tools.yt_dlp,
-            douyin_cmd=config.tools.douyin_downloader,
-            douyin_config=config.tools.douyin_config,
-            dry_run_missing_tools=True,
-        )
+        with ExitStack() as stack:
+            cookie_path = None
+            douyin_config = config.tools.douyin_config
+            if item.platform == Platform.DOUYIN.value:
+                _, cookies = current_account_cookies(config, Platform.DOUYIN, required=True)
+                temporary_config = item_cache / ".douyin-config.yml"
+                copy_config_with_account(
+                    Path(config.tools.douyin_config),
+                    temporary_config,
+                    cookies=cookies,
+                )
+                stack.callback(temporary_config.unlink, missing_ok=True)
+                douyin_config = str(temporary_config)
+            elif item.platform in {
+                Platform.YOUTUBE.value,
+                Platform.BILIBILI.value,
+                Platform.TIKTOK.value,
+            }:
+                cookie_path = stack.enter_context(
+                    current_account_cookie_file(
+                        config,
+                        Platform(item.platform),
+                        required=False,
+                    )
+                )
+            acquired = acquire_source(
+                AcquisitionRequest(item.url, item.platform, item_cache, item.title),
+                yt_dlp_cmd=config.tools.yt_dlp,
+                douyin_cmd=config.tools.douyin_downloader,
+                douyin_config=douyin_config,
+                cookies_file=cookie_path,
+                dry_run_missing_tools=True,
+            )
         transcription = transcribe_source(
             acquired.media_path,
             acquired.transcript_hint,

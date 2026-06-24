@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from dataclasses import dataclass
@@ -7,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 
 from obsidian_ingest.config import AppConfig
+from obsidian_ingest.accounts.models import Platform
+from obsidian_ingest.accounts.runtime import CookieLoader, current_account_cookies
 from obsidian_ingest.queue_store import QueueStore
 
 DOUYIN_FAVORITES_URL = "https://www.douyin.com/user/self?showTab=favorite_collection"
@@ -26,10 +29,38 @@ def build_douyin_favorites_url(run_id: str) -> str:
 
 
 def copy_config_with_collect_count(source: Path, target: Path, count: int) -> None:
-    if count < 1:
+    copy_config_with_account(source, target, count=count)
+
+
+def copy_config_with_account(
+    source: Path,
+    target: Path,
+    count: int | None = None,
+    cookies: list[dict[str, object]] | None = None,
+) -> None:
+    if count is not None and count < 1:
         raise ValueError("count must be >= 1")
 
     text = Path(source).read_text(encoding="utf-8")
+    if count is not None:
+        text = _replace_collect_count(text, count)
+    if cookies is not None:
+        cookie_map = {
+            str(cookie.get("name", "")).strip(): str(cookie.get("value", ""))
+            for cookie in cookies
+            if str(cookie.get("name", "")).strip()
+        }
+        if not cookie_map:
+            raise ValueError("Douyin account has no usable cookies")
+        text = _replace_yaml_mapping(text, "cookies", cookie_map)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+
+
+def _replace_collect_count(text: str, count: int) -> str:
+    if count < 1:
+        raise ValueError("count must be >= 1")
     if re.search(r"(?m)^(\s*)collect:\s*\d+\s*$", text):
         text = re.sub(
             r"(?m)^(\s*)collect:\s*\d+\s*$",
@@ -39,9 +70,19 @@ def copy_config_with_collect_count(source: Path, target: Path, count: int) -> No
         )
     else:
         text = text.rstrip() + f"\nnumber:\n  collect: {count}\n"
+    return text
 
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(text, encoding="utf-8")
+
+def _replace_yaml_mapping(text: str, key: str, values: dict[str, str]) -> str:
+    lines = text.splitlines()
+    start = next((index for index, line in enumerate(lines) if re.match(rf"^{re.escape(key)}\s*:\s*$", line)), None)
+    replacement = [f"{key}:", *[f"  {name}: {json.dumps(value, ensure_ascii=False)}" for name, value in values.items()]]
+    if start is None:
+        return text.rstrip() + "\n" + "\n".join(replacement) + "\n"
+    end = start + 1
+    while end < len(lines) and (not lines[end].strip() or lines[end][0].isspace() or lines[end].lstrip().startswith("#")):
+        end += 1
+    return "\n".join([*lines[:start], *replacement, *lines[end:]]) + "\n"
 
 
 DOUYIN_CONTENT_EXTENSIONS = (".txt", ".mp4")
@@ -63,7 +104,11 @@ def discover_douyin_exports(download_dir: Path) -> list[Path]:
     return sorted(by_stem.values(), key=lambda item: str(item).lower())
 
 
-def collect_douyin_favorites(config: AppConfig, count: int) -> DouyinCollectionResult:
+def collect_douyin_favorites(
+    config: AppConfig,
+    count: int,
+    cookie_loader: CookieLoader | None = None,
+) -> DouyinCollectionResult:
     if count < 1:
         raise ValueError("count must be >= 1")
 
@@ -75,8 +120,14 @@ def collect_douyin_favorites(config: AppConfig, count: int) -> DouyinCollectionR
     if not base_config.exists():
         raise FileNotFoundError(f"Douyin config not found: {base_config}")
 
-    run_config = run_dir / "douyin-config.yml"
-    copy_config_with_collect_count(base_config, run_config, count)
+    account, cookies = current_account_cookies(
+        config,
+        Platform.DOUYIN,
+        required=True,
+        cookie_loader=cookie_loader,
+    )
+    run_config = run_dir / ".douyin-config.yml"
+    copy_config_with_account(base_config, run_config, count=count, cookies=cookies)
 
     command = [
         config.tools.douyin_downloader,
@@ -87,7 +138,10 @@ def collect_douyin_favorites(config: AppConfig, count: int) -> DouyinCollectionR
         "-c",
         str(run_config),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+    finally:
+        run_config.unlink(missing_ok=True)
     if completed.returncode != 0:
         message = completed.stderr.strip() or completed.stdout.strip() or "douyin collector failed"
         raise RuntimeError(message)
@@ -111,5 +165,8 @@ def collect_douyin_favorites(config: AppConfig, count: int) -> DouyinCollectionR
         download_dir=run_dir,
         queued=len(queued_files),
         files=queued_files,
-        notes=[f"Douyin favorites collected with count={count}"],
+        notes=[
+            f"Douyin favorites collected with count={count}",
+            f"Account: {account.display_name} ({account.platform_user_id})",
+        ],
     )

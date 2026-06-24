@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import json
 import subprocess
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
 from obsidian_ingest.config import AppConfig
+from obsidian_ingest.accounts.models import Platform
+from obsidian_ingest.accounts.providers.base import AccountIdentityError
+from obsidian_ingest.accounts.runtime import CookieLoader, current_account_cookie_file
+from obsidian_ingest.accounts.service import AccountServiceError
 from obsidian_ingest.queue_store import QueueStore
 
 
@@ -48,14 +53,29 @@ def collect_platform_list(
     limit: int = 50,
     platform: str = "auto",
     metadata_file: Path | None = None,
+    cookie_loader: CookieLoader | None = None,
 ) -> PlatformListResult:
     store = QueueStore(config.paths.queue_db)
     error: str | None = None
     used_fallback = False
 
     try:
-        json_text = _read_metadata(config, source_url, metadata_file)
+        account_platform = _account_platform(platform, source_url)
+        cookie_context = (
+            current_account_cookie_file(
+                config,
+                account_platform,
+                required=False,
+                cookie_loader=cookie_loader,
+            )
+            if metadata_file is None and account_platform is not None
+            else nullcontext(None)
+        )
+        with cookie_context as cookie_path:
+            json_text = _read_metadata(config, source_url, metadata_file, cookie_path)
         items = parse_yt_dlp_flat_json(json_text, source_url=source_url)[:limit]
+    except (AccountServiceError, AccountIdentityError):
+        raise
     except Exception as exc:
         items = []
         error = str(exc)
@@ -80,11 +100,20 @@ def collect_platform_list(
     return PlatformListResult(source_url=source_url, queued=len(queued_items), items=queued_items, used_fallback=used_fallback, error=error)
 
 
-def _read_metadata(config: AppConfig, source_url: str, metadata_file: Path | None) -> str:
+def _read_metadata(
+    config: AppConfig,
+    source_url: str,
+    metadata_file: Path | None,
+    cookie_path: Path | None = None,
+) -> str:
     if metadata_file is not None:
         return Path(metadata_file).read_text(encoding="utf-8")
+    command = [config.tools.yt_dlp, "--flat-playlist", "--dump-single-json"]
+    if cookie_path is not None:
+        command.extend(["--cookies", str(cookie_path)])
+    command.append(source_url)
     completed = subprocess.run(
-        [config.tools.yt_dlp, "--flat-playlist", "--dump-single-json", source_url],
+        command,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -95,6 +124,22 @@ def _read_metadata(config: AppConfig, source_url: str, metadata_file: Path | Non
     if completed.returncode != 0:
         raise RuntimeError((completed.stderr or completed.stdout or "yt-dlp failed").strip())
     return completed.stdout
+
+
+def _account_platform(platform: str, source_url: str) -> Platform | None:
+    if platform != "auto":
+        try:
+            return Platform(platform)
+        except ValueError:
+            return None
+    host = urlparse(source_url).netloc.lower()
+    if "bilibili.com" in host:
+        return Platform.BILIBILI
+    if "youtube.com" in host or "youtu.be" in host:
+        return Platform.YOUTUBE
+    if "tiktok.com" in host:
+        return Platform.TIKTOK
+    return None
 
 
 def _entry_url(entry: dict[str, object], source_url: str) -> str:

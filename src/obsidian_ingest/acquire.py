@@ -31,6 +31,7 @@ def build_acquisition_command(
     yt_dlp_cmd: str = "yt-dlp",
     douyin_cmd: str = "douyin-downloader",
     douyin_config: str = "",
+    cookies_file: Path | None = None,
 ) -> list[str] | None:
     if request.platform == "douyin":
         command = [
@@ -44,7 +45,7 @@ def build_acquisition_command(
             command.extend(["-c", douyin_config])
         return command
     if request.platform in {"youtube", "bilibili", "tiktok", "web"}:
-        return [
+        command = [
             yt_dlp_cmd,
             "--write-auto-subs",
             "--write-subs",
@@ -55,8 +56,11 @@ def build_acquisition_command(
             "mp3",
             "-o",
             str(request.output_dir / "%(title).120s.%(ext)s"),
-            request.url,
         ]
+        if cookies_file is not None:
+            command.extend(["--cookies", str(cookies_file)])
+        command.append(request.url)
+        return command
     return None
 
 
@@ -65,6 +69,7 @@ def acquire_source(
     yt_dlp_cmd: str = "yt-dlp",
     douyin_cmd: str = "douyin-downloader",
     douyin_config: str = "",
+    cookies_file: Path | None = None,
     dry_run_missing_tools: bool = True,
 ) -> AcquisitionResult:
     request.output_dir.mkdir(parents=True, exist_ok=True)
@@ -101,6 +106,7 @@ def acquire_source(
         yt_dlp_cmd=yt_dlp_cmd,
         douyin_cmd=douyin_cmd,
         douyin_config=douyin_config,
+        cookies_file=cookies_file,
     )
     executable = command[0] if command else None
     if not command or not executable or shutil.which(executable) is None:

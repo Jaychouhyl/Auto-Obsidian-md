@@ -132,7 +132,7 @@ def build_parser() -> argparse.ArgumentParser:
     collect_list = subparsers.add_parser("collect-list", help="Collect items from a Bilibili/YouTube playlist, channel, or favorite list")
     collect_list.add_argument("url")
     collect_list.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
-    collect_list.add_argument("--platform", default="auto", choices=["auto", "youtube", "bilibili"])
+    collect_list.add_argument("--platform", default="auto", choices=["auto", "youtube", "bilibili", "tiktok"])
     collect_list.add_argument("--limit", type=int, default=50)
     collect_list.add_argument("--metadata-file", help="Read yt-dlp JSON from a local file instead of running yt-dlp")
     collect_list.add_argument("--json", action="store_true")
