@@ -76,6 +76,23 @@ class AccountServiceTest(unittest.TestCase):
             self.assertEqual(verified.status, AccountStatus.ACTIVE)
             self.assertTrue(verified.last_verified_at)
 
+    def test_verify_rejects_identity_drift(self) -> None:
+        class SwitchedBrowser(FakeBrowser):
+            def verify(self, profile_dir, provider):
+                return AccountCandidate(provider.platform, "陌生账号", "user-999", provider.identity_url)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            service = AccountService(Path(tmp), browser=SwitchedBrowser())
+            account = service.confirm_login(
+                service.start_login(Platform.YOUTUBE)["candidate_id"]
+            )
+
+            verified = service.verify_account(account.id)
+
+            self.assertEqual(verified.status, AccountStatus.ERROR)
+            self.assertEqual(verified.platform_user_id, "user-100")
+            self.assertIn("另一个账号", verified.error)
+
     def test_migrates_legacy_douyin_cookie_map(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

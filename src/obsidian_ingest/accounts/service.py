@@ -96,14 +96,24 @@ class AccountService:
         profile_dir = self.store.resolve_profile_dir(account.profile_dir)
         try:
             identity = self.browser.verify(profile_dir, provider_for(account.platform))
-            updated = replace(
-                account,
-                display_name=identity.display_name,
-                platform_user_id=identity.platform_user_id,
-                status=AccountStatus.ACTIVE,
-                last_verified_at=_now(),
-                error="",
-            )
+            if identity.platform_user_id != account.platform_user_id:
+                updated = replace(
+                    account,
+                    status=AccountStatus.ERROR,
+                    last_verified_at=_now(),
+                    error=(
+                        f"当前浏览器资料已登录为另一个账号：{identity.display_name} "
+                        f"({identity.platform_user_id})。请使用“重新登录”并确认身份。"
+                    ),
+                )
+            else:
+                updated = replace(
+                    account,
+                    display_name=identity.display_name,
+                    status=AccountStatus.ACTIVE,
+                    last_verified_at=_now(),
+                    error="",
+                )
         except AccountIdentityError as exc:
             updated = replace(account, status=AccountStatus.EXPIRED, error=str(exc))
         return self.store.save_account(updated, make_current=account.is_current)

@@ -380,13 +380,25 @@ def _cmd_clip_webpage(args: argparse.Namespace) -> int:
 
 def _cmd_collect_list(args: argparse.Namespace) -> int:
     config = load_config(Path(args.config))
-    result = collect_platform_list(
-        config,
-        args.url,
-        limit=args.limit,
-        platform=args.platform,
-        metadata_file=Path(args.metadata_file) if args.metadata_file else None,
-    )
+    try:
+        result = collect_platform_list(
+            config,
+            args.url,
+            limit=args.limit,
+            platform=args.platform,
+            metadata_file=Path(args.metadata_file) if args.metadata_file else None,
+        )
+    except (AccountServiceError, AccountIdentityError) as exc:
+        payload = {"status": "failed", "error": exc.to_dict()}
+        _print_account_payload(payload, args.json)
+        return 1
+    except Exception as exc:
+        payload = {
+            "status": "failed",
+            "error": {"code": "collect_list_failed", "message": str(exc)},
+        }
+        _print_account_payload(payload, args.json)
+        return 1
     payload = {
         "status": "done",
         "source_url": result.source_url,
