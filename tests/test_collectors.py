@@ -74,6 +74,42 @@ class DouyinCollectorTest(unittest.TestCase):
                 ["post_live_1.mp4", "post_live_2.mp4"],
             )
 
+    def test_creates_markdown_export_for_gallery_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            nested = root / "collect" / "gallery-post"
+            nested.mkdir(parents=True)
+            (nested / "gallery-post_1.jpg").write_text("img", encoding="utf-8")
+            (nested / "gallery-post_2.webp").write_text("img", encoding="utf-8")
+            (nested / "gallery-post_data.json").write_text(
+                '{"media_type":"gallery","desc":"二战提分经验贴","author_name":"学习博主","date":"2026-04-08","tags":["考研","二战"],"aweme_id":"123"}',
+                encoding="utf-8",
+            )
+
+            exports = discover_douyin_exports(root)
+
+            self.assertEqual([path.name for path in exports], ["gallery-post_gallery.md"])
+            text = exports[0].read_text(encoding="utf-8")
+            self.assertIn("# 二战提分经验贴", text)
+            self.assertIn("- 作者：学习博主", text)
+            self.assertIn("- 标签：考研、二战", text)
+            self.assertIn("- 图片数量：2", text)
+
+    def test_does_not_create_gallery_markdown_when_video_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            nested = root / "collect" / "video-post"
+            nested.mkdir(parents=True)
+            (nested / "video-post.mp4").write_text("binary", encoding="utf-8")
+            (nested / "video-post_data.json").write_text(
+                '{"media_type":"video","desc":"video desc"}',
+                encoding="utf-8",
+            )
+
+            exports = discover_douyin_exports(root)
+
+            self.assertEqual([path.name for path in exports], ["video-post.mp4"])
+
 
 class InboxCollectorTest(unittest.TestCase):
     def test_scans_supported_files_only(self) -> None:

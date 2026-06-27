@@ -78,7 +78,7 @@ def process_item(config: AppConfig, store: QueueStore, item: QueueItem) -> Pipel
             dry_run_missing_tools=True,
         )
         summary = summarize_transcript(
-            transcription.text,
+            build_summary_input(item, transcription),
             enabled=config.llm.enabled,
             base_url=config.llm.base_url,
             api_key=config.llm.api_key,
@@ -106,6 +106,16 @@ def process_item(config: AppConfig, store: QueueStore, item: QueueItem) -> Pipel
     except Exception as exc:
         store.mark_failed(item.id, str(exc))
         return PipelineResult(item.id, "failed", None, str(exc))
+
+
+def build_summary_input(item: QueueItem, transcription) -> str:
+    parts: list[str] = []
+    if item.title:
+        parts.append(f"标题：{item.title}")
+    text = str(transcription.text or "").strip()
+    if text:
+        parts.append(f"转写/正文：\n{text}")
+    return "\n\n".join(parts) or str(item.url)
 
 
 def _note_incomplete(acquired, transcription) -> bool:

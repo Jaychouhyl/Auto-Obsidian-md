@@ -7,12 +7,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from obsidian_ingest.config import AppConfig
 from obsidian_ingest.accounts.models import Platform
 from obsidian_ingest.accounts.runtime import CookieLoader, current_account_cookies
+from obsidian_ingest.config import AppConfig
 from obsidian_ingest.queue_store import QueueStore
 
 DOUYIN_FAVORITES_URL = "https://www.douyin.com/user/self?showTab=favorite_collection"
+DOUYIN_CONTENT_EXTENSIONS = (".txt", ".md", ".mp4")
+DOUYIN_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
 
 @dataclass(frozen=True)
@@ -85,23 +87,106 @@ def _replace_yaml_mapping(text: str, key: str, values: dict[str, str]) -> str:
     return "\n".join([*lines[:start], *replacement, *lines[end:]]) + "\n"
 
 
-DOUYIN_CONTENT_EXTENSIONS = (".txt", ".mp4")
-
-
 def discover_douyin_exports(download_dir: Path) -> list[Path]:
-    """每条视频挑一个内容文件入队：同名的文本(.txt)优先于视频(.mp4)，忽略封面/音乐；同一文件夹内的多条(如 live_1/live_2)各自保留。"""
+    """Return one processable source per downloaded Douyin item."""
     if not download_dir.exists():
         return []
+    _ensure_gallery_markdown_exports(download_dir)
+
     by_stem: dict[Path, Path] = {}
     for path in sorted(download_dir.rglob("*"), key=lambda item: str(item).lower()):
         suffix = path.suffix.lower()
         if suffix not in DOUYIN_CONTENT_EXTENSIONS:
             continue
-        key = path.with_suffix("")  # 同名不同扩展(.mp4/.txt)视作同一条视频
+        key = path.with_suffix("")
         chosen = by_stem.get(key)
-        if chosen is None or (chosen.suffix.lower() == ".mp4" and suffix == ".txt"):
+        if chosen is None or _export_priority(suffix) < _export_priority(chosen.suffix.lower()):
             by_stem[key] = path
     return sorted(by_stem.values(), key=lambda item: str(item).lower())
+
+
+def _export_priority(suffix: str) -> int:
+    return {".txt": 0, ".md": 1, ".mp4": 2}.get(suffix.lower(), 9)
+
+
+def _ensure_gallery_markdown_exports(download_dir: Path) -> None:
+    for data_path in sorted(download_dir.rglob("*_data.json"), key=lambda item: str(item).lower()):
+        parent = data_path.parent
+        if _has_primary_text_or_video(parent):
+            continue
+        target = parent / f"{data_path.name.removesuffix('_data.json')}_gallery.md"
+        if target.exists():
+            continue
+        target.write_text(_render_gallery_markdown(data_path), encoding="utf-8")
+
+
+def _has_primary_text_or_video(folder: Path) -> bool:
+    for path in folder.iterdir():
+        if path.is_file() and path.suffix.lower() in {".txt", ".mp4"}:
+            return True
+    return False
+
+
+def _render_gallery_markdown(data_path: Path) -> str:
+    data = _read_json_object(data_path)
+    desc = _as_text(data.get("desc")) or data_path.parent.name
+    title = next((line.strip() for line in desc.splitlines() if line.strip()), data_path.parent.name)
+    author = _as_text(data.get("author_name")) or "未知"
+    date = _as_text(data.get("date")) or "未知"
+    aweme_id = _as_text(data.get("aweme_id")) or "未知"
+    media_type = _as_text(data.get("media_type")) or "gallery"
+    tags = _as_text_list(data.get("tags"))
+    images = _gallery_images(data_path.parent)
+
+    lines = [
+        f"# {title}",
+        "",
+        "来源：抖音图文收藏",
+        "",
+        "## 元信息",
+        f"- 作者：{author}",
+        f"- 日期：{date}",
+        f"- 类型：{media_type}",
+        f"- 作品 ID：{aweme_id}",
+        f"- 标签：{'、'.join(tags) if tags else '无'}",
+        f"- 图片数量：{len(images)}",
+        "",
+        "## 文案",
+        desc.strip(),
+    ]
+    if images:
+        lines.extend(["", "## 图片文件", *[f"- {path.name}" for path in images]])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _read_json_object(path: Path) -> dict[str, object]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _as_text(value: object) -> str:
+    return str(value).strip() if value is not None else ""
+
+
+def _as_text_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [text for item in value if (text := _as_text(item))]
+
+
+def _gallery_images(folder: Path) -> list[Path]:
+    images: list[Path] = []
+    for path in sorted(folder.iterdir(), key=lambda item: str(item).lower()):
+        if not path.is_file() or path.suffix.lower() not in DOUYIN_IMAGE_EXTENSIONS:
+            continue
+        stem = path.stem.lower()
+        if stem.endswith("_cover") or stem.endswith("_avatar"):
+            continue
+        images.append(path)
+    return images
 
 
 def collect_douyin_favorites(

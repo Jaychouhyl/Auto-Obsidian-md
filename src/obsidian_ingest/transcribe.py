@@ -29,8 +29,6 @@ def build_transcription_command(
         str(media_path),
         "--model",
         "tiny",
-        "--language",
-        "Chinese",
         "--output_dir",
         str(directory),
         "--output_format",

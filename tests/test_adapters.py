@@ -77,6 +77,7 @@ class AdapterTest(unittest.TestCase):
         self.assertIn("--output_format", command)
         self.assertIn("False", command)
         self.assertIn("--verbose", command)
+        self.assertNotIn("--language", command)
 
     def test_transcribe_source_uses_hint_when_no_media(self):
         result = transcribe_source(media_path=None, transcript_hint="raw source text")

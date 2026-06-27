@@ -2,11 +2,18 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#app {
+  height: 100%;
+}
+
 body {
   margin: 0;
   font-family: Inter, "Microsoft YaHei", sans-serif;
   color: #182026;
   background: #eef1f3;
+  overflow: hidden;
 }
 
 button,
@@ -53,12 +60,15 @@ textarea {
 .shell {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 aside {
   background: #151a1e;
   color: #f7f1e5;
+  height: 100vh;
+  overflow-y: auto;
   padding: 22px;
 }
 
@@ -84,6 +94,8 @@ aside {
 }
 
 main {
+  height: 100vh;
+  overflow-y: auto;
   padding: 28px;
   min-width: 0;
 }
@@ -602,8 +614,15 @@ th {
 }
 
 @media (max-width: 880px) {
+  body {
+    overflow: auto;
+  }
+
   .shell {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
   }
 
   aside {
@@ -611,6 +630,13 @@ th {
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
+    height: auto;
+    overflow-y: visible;
+  }
+
+  main {
+    height: auto;
+    overflow-y: visible;
   }
 
   .brand {

@@ -22,6 +22,7 @@ cache/
 logs/
 inbox/
 /accounts/
+archive/
 *.log
 *.sqlite
 *.sqlite-shm
