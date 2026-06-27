@@ -74,6 +74,7 @@ cd <项目目录>
 .\run.ps1 dependencies report --json --config .\config.toml
 .\run.ps1 dependencies install --json --config .\config.toml
 .\run.ps1 queue --json --config .\config.toml
+.\run.ps1 backup --json --config .\config.toml
 ```
 
 ---

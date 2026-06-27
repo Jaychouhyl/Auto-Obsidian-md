@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -14,6 +16,8 @@ pub struct CommandResult {
 }
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(180);
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 pub const ACCOUNT_LOGIN_TIMEOUT: Duration = Duration::from_secs(660);
 
 pub fn run_ingest(args: &[String]) -> Result<CommandResult, String> {
@@ -54,6 +58,8 @@ pub fn run_ingest_with_timeout(
         .current_dir(&workspace)
         .env("OBSIDIAN_INGEST_HOME", &workspace)
         .env("PYTHONIOENCODING", "utf-8");
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
 
     let mut child = command
         .stdout(Stdio::piped())

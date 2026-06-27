@@ -74,6 +74,25 @@ class DouyinCollectorTest(unittest.TestCase):
                 ["post_live_1.mp4", "post_live_2.mp4"],
             )
 
+    def test_uses_downloader_manifest_order_before_file_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = root / "collect" / "z-last-name"
+            second = root / "collect" / "a-first-name"
+            first.mkdir(parents=True)
+            second.mkdir(parents=True)
+            (first / "z-last-name.txt").write_text("first", encoding="utf-8")
+            (second / "a-first-name.txt").write_text("second", encoding="utf-8")
+            (root / "download_manifest.jsonl").write_text(
+                '{"file_paths":["collect/z-last-name/z-last-name.txt"]}\n'
+                '{"file_paths":["collect/a-first-name/a-first-name.txt"]}\n',
+                encoding="utf-8",
+            )
+
+            exports = discover_douyin_exports(root)
+
+            self.assertEqual([path.name for path in exports], ["z-last-name.txt", "a-first-name.txt"])
+
     def test_creates_markdown_export_for_gallery_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

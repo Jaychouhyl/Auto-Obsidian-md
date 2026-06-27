@@ -25,6 +25,15 @@ api_key = ""
 model = "gpt-4o-mini"
 language = "zh-CN"
 
+[outputs]
+formats = ["markdown"]
+html_dir = "./exports/html"
+csv_path = "./exports/notes-index.csv"
+notion_token = ""
+notion_database_id = ""
+notion_title_property = "Name"
+notion_api_base = "https://api.notion.com/v1"
+
 [routing]
 enabled = true
 fallback_folder = "Inbox/Learning Inbox"

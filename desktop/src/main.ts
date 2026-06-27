@@ -1,6 +1,7 @@
 import "./styles.css";
 import { getVersion } from "@tauri-apps/api/app";
 import {
+  backupProject,
   cancelAccountLogin,
   clipWebpage,
   collectPlatformList,
@@ -17,10 +18,12 @@ import {
   importLinks,
   knowledgeMaintenance,
   listRecentLogs,
+  openOutput,
   processQueue,
   reloginAccount,
   retryFailed,
   retryItem,
+  restoreProject,
   runDoctor,
   runDoctorJson,
   saveAppConfig,
@@ -113,6 +116,15 @@ function draftFromStatus(status: StatusPayload): AppConfigDraft {
       whisper: tools.whisper ?? "whisper",
       funasr: tools.funasr ?? "funasr",
     },
+    outputs: {
+      formats: status.outputs?.formats?.length ? status.outputs.formats : ["markdown"],
+      html_dir: status.outputs?.html_dir ?? "",
+      csv_path: status.outputs?.csv_path ?? "",
+      notion_token: "",
+      notion_database_id: status.outputs?.notion_database_id_configured ? "configured" : "",
+      notion_title_property: status.outputs?.notion_title_property ?? "Name",
+      notion_api_base: status.outputs?.notion_api_base ?? "https://api.notion.com/v1",
+    },
   };
 }
 
@@ -177,6 +189,15 @@ function foldersFromText(value: string): string[] {
     .filter((item, index, array) => array.indexOf(item) === index);
 }
 
+function outputFormatsFromForm(base: AppConfigDraft): string[] {
+  const formats: string[] = [];
+  if (boolFromInput("cfg-output-markdown", base.outputs.formats.includes("markdown"))) formats.push("markdown");
+  if (boolFromInput("cfg-output-html", base.outputs.formats.includes("html"))) formats.push("html");
+  if (boolFromInput("cfg-output-csv", base.outputs.formats.includes("csv"))) formats.push("csv");
+  if (boolFromInput("cfg-output-notion", base.outputs.formats.includes("notion"))) formats.push("notion");
+  return formats.length ? formats : ["markdown"];
+}
+
 function buildDraftFromForm(): AppConfigDraft {
   const base = state.configDraft ?? draftFromStatus(state.status as StatusPayload);
   return {
@@ -203,9 +224,20 @@ function buildDraftFromForm(): AppConfigDraft {
       yt_dlp: stringFromInput("cfg-yt-dlp") || base.tools.yt_dlp,
       ffmpeg: stringFromInput("cfg-ffmpeg") || base.tools.ffmpeg,
       douyin_downloader: stringFromInput("cfg-douyin-downloader") || base.tools.douyin_downloader,
-      douyin_config: stringFromInput("cfg-douyin-config"),
+      douyin_config: stringFromInput("cfg-douyin-config") || base.tools.douyin_config,
       whisper: stringFromInput("cfg-whisper") || base.tools.whisper,
       funasr: stringFromInput("cfg-funasr") || base.tools.funasr,
+    },
+    outputs: {
+      formats: outputFormatsFromForm(base),
+      html_dir: stringFromInput("cfg-output-html-dir") || base.outputs.html_dir,
+      csv_path: stringFromInput("cfg-output-csv-path") || base.outputs.csv_path,
+      notion_token: stringFromInput("cfg-output-notion-token"),
+      notion_database_id: stringFromInput("cfg-output-notion-db") === "configured"
+        ? base.outputs.notion_database_id
+        : stringFromInput("cfg-output-notion-db") || base.outputs.notion_database_id,
+      notion_title_property: stringFromInput("cfg-output-notion-title") || base.outputs.notion_title_property,
+      notion_api_base: stringFromInput("cfg-output-notion-api") || base.outputs.notion_api_base,
     },
   };
 }
@@ -214,6 +246,49 @@ async function handleSaveConfig(): Promise<void> {
   await runAction("保存配置", () => saveAppConfig(buildDraftFromForm()));
   await loadDoctorSilently();
   render();
+}
+
+async function handleOpenOutput(kind: string): Promise<void> {
+  await runAction("打开位置", () => openOutput(kind));
+}
+
+async function handleBackupProject(): Promise<void> {
+  setBusy(true);
+  setMessage("正在创建项目备份...");
+  render();
+  try {
+    const result = await backupProject();
+    if (!result.ok) {
+      setError(result.stderr || result.stdout || "备份失败");
+      return;
+    }
+    let backupPath = "";
+    try {
+      const parsed = JSON.parse(result.stdout) as { backup_path?: string };
+      backupPath = parsed.backup_path ?? "";
+    } catch {
+      backupPath = "";
+    }
+    setMessage(backupPath ? `备份完成：${backupPath}` : result.stdout || "备份完成");
+    await reloadData();
+  } catch (error) {
+    setError(error instanceof Error ? error.message : String(error));
+  } finally {
+    setBusy(false);
+    render();
+  }
+}
+
+async function handleRestoreProject(): Promise<void> {
+  const backupFile = stringFromInput("restore-backup-path");
+  if (!backupFile) {
+    setError("请先填写备份 zip 文件路径。");
+    render();
+    return;
+  }
+  if (!window.confirm("恢复会覆盖当前配置、队列和账号资料。确认继续？")) return;
+  await runAction("恢复备份", () => restoreProject(backupFile));
+  await refresh();
 }
 
 async function handleDoctorJson(): Promise<void> {
@@ -260,11 +335,63 @@ async function handleInstallDependencies(): Promise<void> {
 async function handleDouyin(): Promise<void> {
   const count = numberFromInput("douyin-count", 5, 1, 100);
   if (count === null) return;
-  await runAction(`处理 ${count} 个抖音收藏`, async () => {
+  setBusy(true);
+  setMessage(`正在抓取抖音收藏，目标 ${count} 条...`);
+  render();
+  try {
     const collect = await collectDouyin(count);
-    if (!collect.ok) return collect;
-    return processQueue(count);
-  });
+    if (!collect.ok) {
+      setError(collect.stderr || collect.stdout || "抖音收藏抓取失败");
+      return;
+    }
+    const stats = extractDouyinCollectStats(collect.stdout);
+    const queued = stats.queued;
+    setMessage(`抖音请求 ${stats.requested ?? count} 条，下载器返回 ${stats.returned ?? "若干"} 条，去重入队 ${queued ?? "若干"} 条，轮数 ${stats.attempts ?? "未知"}。正在生成笔记...`);
+    render();
+    const process = await processQueue(queued && queued > 0 ? queued : count);
+    if (!process.ok) {
+      setError(process.stderr || process.stdout || "抖音收藏处理失败");
+    } else {
+      const collectedText = queued === null ? "" : `请求 ${stats.requested ?? count} 条，返回 ${stats.returned ?? "未知"} 条，入队 ${queued} 条，轮数 ${stats.attempts ?? "未知"}；`;
+      setMessage(`${collectedText}处理完成。\n${process.stdout || collect.stdout}`);
+    }
+    await reloadData();
+  } catch (error) {
+    setError(error instanceof Error ? error.message : String(error));
+  } finally {
+    setBusy(false);
+    render();
+  }
+}
+
+function extractQueuedCount(stdout: string): number | null {
+  try {
+    const parsed = JSON.parse(stdout) as { queued?: unknown };
+    const value = Number(parsed.queued);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    const match = stdout.match(/queued["'\s:]+(\d+)/i);
+    return match ? Number.parseInt(match[1], 10) : null;
+  }
+}
+
+function extractDouyinCollectStats(stdout: string): { requested: number | null; returned: number | null; queued: number | null; attempts: number | null } {
+  try {
+    const parsed = JSON.parse(stdout) as Record<string, unknown>;
+    return {
+      requested: numericField(parsed.requested),
+      returned: numericField(parsed.returned),
+      queued: numericField(parsed.queued),
+      attempts: numericField(parsed.attempts),
+    };
+  } catch {
+    return { requested: null, returned: null, queued: extractQueuedCount(stdout), attempts: null };
+  }
+}
+
+function numericField(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 async function runAccountAction(label: string, action: () => Promise<void>): Promise<void> {
@@ -481,25 +608,55 @@ async function setQueueStatus(status: QueueStatus): Promise<void> {
 }
 
 function renderNav(): string {
-  const items: Array<[typeof state.activeView, string]> = [
-    ["setup", "配置"],
-    ["dependencies", "依赖"],
-    ["run", "运行"],
-    ["accounts", "账号"],
-    ["sources", "导入"],
-    ["queue", "队列"],
-    ["rules", "规则"],
-    ["logs", "日志"],
-    ["knowledge", "知识库"],
-    ["updates", "更新"],
-    ["settings", "高级"],
+  const primary: Array<[typeof state.activeView, string, string]> = [
+    ["run", "运行", "Play"],
+    ["accounts", "账号", "User"],
+    ["sources", "导入", "Inbox"],
+    ["queue", "队列", "List"],
+    ["knowledge", "知识库", "Library"],
   ];
-  return items
-    .map(
-      ([key, label]) =>
-        `<button class="nav-item ${state.activeView === key ? "active" : ""}" data-view="${key}">${label}</button>`,
-    )
-    .join("");
+  const utilities: Array<[typeof state.activeView, string, string]> = [
+    ["setup", "配置", "Gear"],
+    ["dependencies", "依赖", "Wrench"],
+    ["rules", "规则", "Route"],
+    ["logs", "日志", "Terminal"],
+    ["updates", "更新", "Upload"],
+    ["settings", "高级", "Sliders"],
+  ];
+  return `
+    <nav class="nav-primary">
+      ${primary.map(([key, label, iconName]) => renderNavButton(key, label, iconName)).join("")}
+    </nav>
+    <div class="nav-spacer"></div>
+    <div class="nav-utilities" aria-label="系统设置">
+      ${utilities.map(([key, label, iconName]) => renderIconButton(key, label, iconName)).join("")}
+    </div>
+  `;
+}
+
+function renderNavButton(view: typeof state.activeView, label: string, iconName: string): string {
+  return `<button class="nav-item ${state.activeView === view ? "active" : ""}" data-view="${view}">${iconSvg(iconName)}<span>${label}</span></button>`;
+}
+
+function renderIconButton(view: typeof state.activeView, label: string, iconName: string): string {
+  return `<button class="nav-icon ${state.activeView === view ? "active" : ""}" data-view="${view}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${iconSvg(iconName)}</button>`;
+}
+
+function iconSvg(name: string): string {
+  const paths: Record<string, string> = {
+    Play: '<polygon points="8 5 19 12 8 19 8 5"></polygon>',
+    User: '<path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle>',
+    Inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"></path><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6l3.5-7Z"></path>',
+    List: '<path d="M8 6h13"></path><path d="M8 12h13"></path><path d="M8 18h13"></path><path d="M3 6h.01"></path><path d="M3 12h.01"></path><path d="M3 18h.01"></path>',
+    Library: '<path d="M4 19.5V5a2 2 0 0 1 2-2h12"></path><path d="M6 17h14"></path><path d="M6 22h14"></path><path d="M6 17a2 2 0 1 0 0 4"></path>',
+    Gear: '<path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2 2 0 1 1-2.83 2.83l-.04-.04A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.06A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.04.04a2 2 0 1 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.06A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.04-.04a2 2 0 1 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.06A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.04-.04a2 2 0 1 1 2.83 2.83l-.04.04A1.7 1.7 0 0 0 19.4 9c.16.58.62 1 1.2 1H21a2 2 0 1 1 0 4h-.06a1.7 1.7 0 0 0-1.54 1Z"></path>',
+    Wrench: '<path d="M14.7 6.3a4 4 0 0 0-5 5L3 18l3 3 6.7-6.7a4 4 0 0 0 5-5l-2.8 2.8-2-2 2.8-2.8Z"></path>',
+    Route: '<circle cx="6" cy="19" r="3"></circle><circle cx="18" cy="5" r="3"></circle><path d="M9 19h1.5a3.5 3.5 0 0 0 0-7H9.5a3.5 3.5 0 0 1 0-7H15"></path>',
+    Terminal: '<path d="m4 17 6-6-6-6"></path><path d="M12 19h8"></path>',
+    Upload: '<path d="M12 3v12"></path><path d="m17 8-5-5-5 5"></path><path d="M21 21H3"></path>',
+    Sliders: '<path d="M4 21v-7"></path><path d="M4 10V3"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M20 21v-5"></path><path d="M20 12V3"></path><path d="M2 14h4"></path><path d="M10 8h4"></path><path d="M18 16h4"></path>',
+  };
+  return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name] ?? ""}</svg>`;
 }
 
 function renderView(): string {
@@ -522,14 +679,20 @@ function renderSetupView(): string {
   return `
     <section class="view">
       <div class="view-header">
-        <h1>配置</h1>
+        <div>
+          <span class="eyebrow">First run</span>
+          <h1>配置</h1>
+        </div>
         <div class="toolbar">
           <button id="save-config" ${disabledAttr()}>保存</button>
           <button id="doctor-json" ${disabledAttr()}>健康检查</button>
         </div>
       </div>
+      ${renderSetupStatus()}
+      ${renderSetupWizard()}
       <div class="form-grid">
-        ${field("Vault", "cfg-vault", draft.obsidian_vault)}
+        ${selectField("输出模式", "cfg-obsidian-mode", [["local", "本地 Markdown / Obsidian 文件夹"], ["rest", "Obsidian Local REST API"]], draft.obsidian_mode)}
+        ${field("输出目录", "cfg-vault", draft.obsidian_vault)}
         ${field("默认文件夹", "cfg-folder", draft.obsidian_folder)}
         ${field("队列数据库", "cfg-queue-db", draft.queue_db)}
         ${field("缓存目录", "cfg-cache-dir", draft.cache_dir)}
@@ -538,10 +701,147 @@ function renderSetupView(): string {
         ${field("LLM Model", "cfg-llm-model", draft.llm_model)}
         ${field("API Key", "cfg-llm-key", "", "password")}
       </div>
+      ${renderOutputConfig(draft)}
+      ${renderBackupPanel()}
       ${renderDoctorReport()}
       ${renderMessageArea()}
     </section>
   `;
+}
+
+function renderOutputConfig(draft: AppConfigDraft): string {
+  return `
+    <section class="panel output-panel">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Outputs</span>
+          <h2>输出方式</h2>
+        </div>
+        <div class="row-actions">
+          <button data-open-output="vault" ${disabledAttr()}>打开 Markdown</button>
+          <button data-open-output="html" ${disabledAttr()}>打开 HTML</button>
+          <button data-open-output="csv" ${disabledAttr()}>打开 CSV</button>
+        </div>
+      </div>
+      <div class="output-toggles">
+        ${checkbox("Markdown / Obsidian", "cfg-output-markdown", draft.outputs.formats.includes("markdown"))}
+        ${checkbox("HTML", "cfg-output-html", draft.outputs.formats.includes("html"))}
+        ${checkbox("Excel / CSV", "cfg-output-csv", draft.outputs.formats.includes("csv"))}
+        ${checkbox("Notion", "cfg-output-notion", draft.outputs.formats.includes("notion"))}
+      </div>
+      <div class="form-grid">
+        ${field("HTML 输出目录", "cfg-output-html-dir", draft.outputs.html_dir)}
+        ${field("Excel/CSV 索引文件", "cfg-output-csv-path", draft.outputs.csv_path)}
+        ${field("Notion Token", "cfg-output-notion-token", "", "password")}
+        ${field("Notion Database ID", "cfg-output-notion-db", draft.outputs.notion_database_id)}
+        ${field("Notion 标题属性", "cfg-output-notion-title", draft.outputs.notion_title_property)}
+        ${field("Notion API Base", "cfg-output-notion-api", draft.outputs.notion_api_base)}
+      </div>
+      <p class="muted">Markdown 是主输出；HTML 会生成独立网页文件；Excel/CSV 会追加索引；Notion 需要 Token 和 Database ID。</p>
+    </section>
+  `;
+}
+
+function renderBackupPanel(): string {
+  return `
+    <section class="panel backup-panel">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Backup</span>
+          <h2>备份与恢复</h2>
+        </div>
+        <div class="row-actions">
+          <button id="backup-project" ${disabledAttr()}>创建备份</button>
+          <button data-open-output="project" ${disabledAttr()}>打开项目目录</button>
+        </div>
+      </div>
+      <div class="inline-form">
+        ${field("备份 zip 路径", "restore-backup-path", "")}
+        <button id="restore-project" ${disabledAttr()}>恢复备份</button>
+      </div>
+      <p class="muted">备份包含配置、队列数据库、账号资料、链接/RSS 文件和抖音配置；不要把备份包公开分享。</p>
+    </section>
+  `;
+}
+
+function renderSetupStatus(): string {
+  const status = state.status;
+  const accountCount = state.accounts.length;
+  const llmState = status?.llm.enabled
+    ? status.llm.api_key_configured
+      ? "LLM 已启用，Key 已配置"
+      : "LLM 已启用，缺少 Key"
+    : "LLM 未启用";
+  return `
+    <div class="status-grid">
+      ${renderStatusCard("项目目录", status?.paths.project_root ?? "未加载")}
+      ${renderStatusCard("输出位置", status?.paths.obsidian_vault ?? "未配置")}
+      ${renderStatusCard("LLM", llmState)}
+      ${renderStatusCard("输出格式", status?.outputs?.formats?.join(", ") ?? "markdown")}
+      ${renderStatusCard("账号", `${accountCount} 个账号`)}
+    </div>
+  `;
+}
+
+function renderSetupWizard(): string {
+  const status = state.status;
+  const requiredIssues = state.doctor?.checks.filter((check) => check.required && !check.ok).length ?? 0;
+  const dependencyMissing = state.dependencies?.summary.missing ?? 0;
+  const steps = [
+    {
+      label: "输出目录",
+      status: status?.paths.obsidian_vault ? "done" : "todo",
+      text: status?.paths.obsidian_vault || "先选择 Markdown/Obsidian 输出目录",
+      action: "setup",
+    },
+    {
+      label: "LLM 摘要",
+      status: status?.llm.enabled && status.llm.api_key_configured ? "done" : "todo",
+      text: status?.llm.enabled
+        ? status.llm.api_key_configured
+          ? "已启用，Key 已配置"
+          : "已启用，等待 API Key"
+        : "开启后可自动总结和打标签",
+      action: "setup",
+    },
+    {
+      label: "账号",
+      status: state.accounts.length ? "done" : "todo",
+      text: state.accounts.length ? `${state.accounts.length} 个账号可用` : "抖音/B 站/YouTube 可在账号页添加",
+      action: "accounts",
+    },
+    {
+      label: "依赖",
+      status: requiredIssues === 0 ? "done" : "todo",
+      text: requiredIssues === 0 ? `核心依赖可用，可选缺失 ${dependencyMissing} 项` : `${requiredIssues} 项必须处理`,
+      action: "dependencies",
+    },
+    {
+      label: "输出格式",
+      status: status?.outputs?.formats?.length ? "done" : "todo",
+      text: status?.outputs?.formats?.join(" / ") || "默认 Markdown，可叠加 HTML、CSV、Notion",
+      action: "setup",
+    },
+  ];
+  return `
+    <section class="setup-wizard">
+      ${steps
+        .map(
+          (step, index) => `
+            <button class="wizard-step ${step.status}" data-view="${step.action}">
+              <span>${String(index + 1).padStart(2, "0")}</span>
+              <b>${escapeHtml(step.label)}</b>
+              <small>${escapeHtml(step.text)}</small>
+            </button>
+          `,
+        )
+        .join("")}
+    </section>
+  `;
+}
+
+function renderStatusCard(label: string, value: string): string {
+  return `<div class="status-card"><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`;
 }
 
 function renderDependenciesView(): string {
@@ -591,9 +891,13 @@ function renderRunView(): string {
   return `
     <section class="view">
       <div class="view-header">
-        <h1>运行</h1>
+        <div>
+          <span class="eyebrow">Command center</span>
+          <h1>运行</h1>
+        </div>
         <button id="refresh" ${disabledAttr()}>刷新</button>
       </div>
+      ${renderRuntimeStrip()}
       <div class="stats">
         <div class="stat"><b>${counts.pending ?? 0}</b><span>待处理</span></div>
         <div class="stat"><b>${counts.done ?? 0}</b><span>已完成</span></div>
@@ -609,8 +913,32 @@ function renderRunView(): string {
         <button id="retry-failed" ${disabledAttr()}>重试失败项</button>
         <button id="scan-inbox" ${disabledAttr()}>扫描 inbox</button>
       </div>
+      <div class="hint-panel">
+        <b>抖音收藏顺序</b>
+        <p>程序会按 douyin-dl 写出的下载 manifest 顺序入队；这个顺序通常接近收藏页/下载器返回顺序，但抖音页面未稳定暴露“收藏时间”字段，所以不能保证严格按收藏时间排序。</p>
+        <p>“抖音数量”是请求上限。程序会最多跑 3 轮下载器并按作品 ID 去重；如果输入 30 但最终入队仍只有 5 条，说明本次账号可见范围或下载器多轮返回的是同一批内容，界面会显示请求数、返回数、入队数和轮数。</p>
+      </div>
       ${renderMessageArea()}
     </section>
+  `;
+}
+
+function renderRuntimeStrip(): string {
+  const status = state.status;
+  const llm = status?.llm.enabled
+    ? status.llm.api_key_configured
+      ? "LLM: on"
+      : "LLM: missing key"
+    : "LLM: off";
+  const douyin = state.accounts.find((account) => account.platform === "douyin" && account.is_current);
+  return `
+    <div class="runtime-strip">
+      <span>${escapeHtml(status?.paths.project_root ?? "未加载项目目录")}</span>
+      <span>${escapeHtml(status?.obsidian.mode === "rest" ? "REST 输出" : "本地 Markdown 输出")}</span>
+      <span>${escapeHtml(`输出: ${status?.outputs?.formats?.join(", ") ?? "markdown"}`)}</span>
+      <span>${escapeHtml(llm)}</span>
+      <span>${escapeHtml(douyin ? `抖音: ${douyin.display_name}` : "抖音: 未登录")}</span>
+    </div>
   `;
 }
 
@@ -626,8 +954,15 @@ function renderAccountsView(): string {
   return `
     <section class="view">
       <div class="view-header">
-        <h1>账号</h1>
+        <div>
+          <span class="eyebrow">Session profiles</span>
+          <h1>账号</h1>
+        </div>
         <button id="refresh" ${disabledAttr()}>刷新</button>
+      </div>
+      <div class="hint-panel">
+        <b>账号存储位置</b>
+        <p>${escapeHtml(state.status?.paths.project_root ?? "")}\\accounts。这里显示的是当前桌面应用真实读取到的账号；如果这里是 0，说明应用没有读到项目目录或还没有保存账号。</p>
       </div>
       <div class="account-platforms">
         ${platforms.map(renderAccountPlatform).join("")}
@@ -921,6 +1256,7 @@ function hiddenAdvancedConfig(draft: AppConfigDraft): string {
     ${hidden("cfg-douyin-config", draft.tools.douyin_config)}
     ${hidden("cfg-whisper", draft.tools.whisper)}
     ${hidden("cfg-funasr", draft.tools.funasr)}
+    ${hiddenOutputConfig(draft)}
   `;
 }
 
@@ -939,6 +1275,22 @@ function hiddenCoreConfig(draft: AppConfigDraft): string {
     ${hidden("cfg-routing-enabled", draft.routing_enabled ? "on" : "")}
     ${hidden("cfg-fallback", draft.fallback_folder)}
     <textarea id="cfg-folders" hidden>${escapeHtml(draft.allowed_folders.join("\n"))}</textarea>
+    ${hiddenOutputConfig(draft)}
+  `;
+}
+
+function hiddenOutputConfig(draft: AppConfigDraft): string {
+  return `
+    ${hidden("cfg-output-markdown", draft.outputs.formats.includes("markdown") ? "on" : "")}
+    ${hidden("cfg-output-html", draft.outputs.formats.includes("html") ? "on" : "")}
+    ${hidden("cfg-output-csv", draft.outputs.formats.includes("csv") ? "on" : "")}
+    ${hidden("cfg-output-notion", draft.outputs.formats.includes("notion") ? "on" : "")}
+    ${hidden("cfg-output-html-dir", draft.outputs.html_dir)}
+    ${hidden("cfg-output-csv-path", draft.outputs.csv_path)}
+    ${hidden("cfg-output-notion-token", "")}
+    ${hidden("cfg-output-notion-db", draft.outputs.notion_database_id)}
+    ${hidden("cfg-output-notion-title", draft.outputs.notion_title_property)}
+    ${hidden("cfg-output-notion-api", draft.outputs.notion_api_base)}
   `;
 }
 
@@ -964,14 +1316,19 @@ function renderLoadingView(title: string): string {
 
 function renderMessageArea(): string {
   return `
-    ${state.message ? `<pre class="message">${escapeHtml(state.message)}</pre>` : ""}
+    ${
+      state.busy
+        ? `<div class="progress-card"><div class="progress-track"><div class="progress-bar"></div></div><span>${escapeHtml(state.message || "正在运行...")}</span></div>`
+        : ""
+    }
+    ${state.message && !state.busy ? `<pre class="message">${escapeHtml(state.message)}</pre>` : ""}
     ${state.error ? `<pre class="error">${escapeHtml(state.error)}</pre>` : ""}
   `;
 }
 
 function renderBanner(): string {
   if (state.bannerDismissed || !state.doctor) return "";
-  const issues = state.doctor.checks.filter((check) => !check.ok);
+  const issues = state.doctor.checks.filter((check) => !check.ok && check.required);
   if (issues.length === 0) return "";
   const items = issues
     .map(
@@ -982,7 +1339,7 @@ function renderBanner(): string {
   return `
     <div class="banner">
       <div class="banner-head">
-        <b>环境检查发现 ${issues.length} 项待处理</b>
+        <b>环境检查发现 ${issues.length} 项必须处理</b>
         <span class="banner-actions">
           <button data-view="dependencies">去依赖</button>
           <button data-view="setup">去配置</button>
@@ -990,7 +1347,7 @@ function renderBanner(): string {
         </span>
       </div>
       <ul class="banner-list">${items}</ul>
-      <small class="muted">缺失的下载 / 转写工具只影响视频处理；只做网页 / RSS / 本地文本入库可忽略。</small>
+      <small class="muted">可选工具不会再弹到顶部横幅；例如 funasr 缺失只会影响可选转写路线，不影响 Whisper 和网页/RSS/本地文本入库。</small>
     </div>
   `;
 }
@@ -1005,6 +1362,11 @@ function bindEvents(): void {
   document.querySelector<HTMLButtonElement>("#refresh")?.addEventListener("click", refresh);
   document.querySelector<HTMLButtonElement>("#refresh-dependencies")?.addEventListener("click", refresh);
   document.querySelector<HTMLButtonElement>("#save-config")?.addEventListener("click", () => void handleSaveConfig());
+  document.querySelectorAll<HTMLButtonElement>("[data-open-output]").forEach((button) => {
+    button.addEventListener("click", () => void handleOpenOutput(button.dataset.openOutput ?? ""));
+  });
+  document.querySelector<HTMLButtonElement>("#backup-project")?.addEventListener("click", () => void handleBackupProject());
+  document.querySelector<HTMLButtonElement>("#restore-project")?.addEventListener("click", () => void handleRestoreProject());
   document.querySelector<HTMLButtonElement>("#doctor-json")?.addEventListener("click", () => void handleDoctorJson());
   document.querySelector<HTMLButtonElement>("#install-dependencies")?.addEventListener("click", () => void handleInstallDependencies());
   document.querySelector<HTMLButtonElement>("#doctor")?.addEventListener("click", () => runAction("doctor", runDoctor));
@@ -1068,7 +1430,7 @@ function bindEvents(): void {
 }
 
 function render(): void {
-  app.innerHTML = `<div class="shell"><aside><div class="brand">Obsidian Ingest</div>${renderNav()}</aside><main>${renderBanner()}${renderView()}</main></div>`;
+  app.innerHTML = `<div class="shell"><aside><div class="brand"><b>Ingest Studio</b><span>local knowledge pipeline</span></div>${renderNav()}</aside><main>${renderBanner()}${renderView()}</main></div>`;
   bindEvents();
 }
 

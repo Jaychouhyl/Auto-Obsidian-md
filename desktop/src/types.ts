@@ -60,6 +60,16 @@ export interface StatusPayload {
     language: string;
     api_key_configured: boolean;
   };
+  outputs: {
+    formats: string[];
+    html_dir: string;
+    csv_path: string;
+    notion_configured: boolean;
+    notion_database_id_configured: boolean;
+    notion_token_configured: boolean;
+    notion_title_property: string;
+    notion_api_base: string;
+  };
 }
 
 export interface QueueItem {
@@ -92,6 +102,16 @@ export interface ToolConfigDraft {
   funasr: string;
 }
 
+export interface OutputsConfigDraft {
+  formats: string[];
+  html_dir: string;
+  csv_path: string;
+  notion_token: string;
+  notion_database_id: string;
+  notion_title_property: string;
+  notion_api_base: string;
+}
+
 export interface AppConfigDraft {
   queue_db: string;
   cache_dir: string;
@@ -110,6 +130,7 @@ export interface AppConfigDraft {
   fallback_folder: string;
   allowed_folders: string[];
   tools: ToolConfigDraft;
+  outputs: OutputsConfigDraft;
 }
 
 export interface SourceFiles {

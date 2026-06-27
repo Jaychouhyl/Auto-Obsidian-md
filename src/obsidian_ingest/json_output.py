@@ -59,6 +59,16 @@ def status_payload(config: AppConfig, queue_counts: dict[str, int]) -> dict[str,
             "language": config.llm.language,
             "api_key_configured": bool(config.llm.api_key),
         },
+        "outputs": {
+            "formats": config.outputs.formats,
+            "html_dir": str(config.outputs.html_dir),
+            "csv_path": str(config.outputs.csv_path),
+            "notion_configured": bool(config.outputs.notion_token and config.outputs.notion_database_id),
+            "notion_database_id_configured": bool(config.outputs.notion_database_id),
+            "notion_token_configured": bool(config.outputs.notion_token),
+            "notion_title_property": config.outputs.notion_title_property,
+            "notion_api_base": config.outputs.notion_api_base,
+        },
     }
 
 

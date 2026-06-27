@@ -50,6 +50,17 @@ class RoutingConfig:
 
 
 @dataclass(frozen=True)
+class OutputsConfig:
+    formats: list[str]
+    html_dir: Path
+    csv_path: Path
+    notion_token: str
+    notion_database_id: str
+    notion_title_property: str
+    notion_api_base: str
+
+
+@dataclass(frozen=True)
 class AppConfig:
     config_path: Path
     paths: PathsConfig
@@ -57,6 +68,7 @@ class AppConfig:
     tools: ToolsConfig
     llm: LlmConfig
     routing: RoutingConfig
+    outputs: OutputsConfig
 
 
 def _default_project_dir() -> Path:
@@ -95,11 +107,13 @@ def load_config(config_path: Path) -> AppConfig:
     tools = raw.get("tools", {})
     llm = raw.get("llm", {})
     routing = raw.get("routing", {})
+    outputs = raw.get("outputs", {})
     base_dir = config_path.parent
     fallback_folder = str(routing.get("fallback_folder", obsidian.get("folder", "Inbox/Learning Inbox")))
     allowed_folders = _string_list(routing.get("allowed_folders", []))
     if fallback_folder and fallback_folder not in allowed_folders:
         allowed_folders.append(fallback_folder)
+    output_formats = _output_formats(outputs.get("formats", ["markdown"]))
     return AppConfig(
         config_path=config_path,
         paths=PathsConfig(
@@ -134,6 +148,15 @@ def load_config(config_path: Path) -> AppConfig:
             fallback_folder=fallback_folder,
             allowed_folders=allowed_folders,
         ),
+        outputs=OutputsConfig(
+            formats=output_formats,
+            html_dir=_path(outputs.get("html_dir", base_dir / "exports" / "html")),
+            csv_path=_path(outputs.get("csv_path", base_dir / "exports" / "notes-index.csv")),
+            notion_token=_secret_value(str(outputs.get("notion_token", "")), ("NOTION_TOKEN", "NOTION_API_KEY")),
+            notion_database_id=str(outputs.get("notion_database_id", "")).strip(),
+            notion_title_property=str(outputs.get("notion_title_property", "Name")).strip() or "Name",
+            notion_api_base=str(outputs.get("notion_api_base", "https://api.notion.com/v1")).rstrip("/"),
+        ),
     )
 
 
@@ -163,6 +186,20 @@ def _llm_api_key(value: str, base_url: str) -> str:
     return ""
 
 
+def _secret_value(value: str, env_names: tuple[str, ...]) -> str:
+    value = value.strip()
+    if value:
+        return value
+    for name in env_names:
+        candidate = os.getenv(name, "").strip()
+        if candidate:
+            return candidate
+        candidate = _windows_user_env(name)
+        if candidate:
+            return candidate
+    return ""
+
+
 def _windows_user_env(name: str) -> str:
     try:
         import winreg  # type: ignore
@@ -182,6 +219,18 @@ def _string_list(value: object) -> list[str]:
     if isinstance(value, str) and value.strip():
         return [value.strip().replace("\\", "/").strip("/")]
     return []
+
+
+def _output_formats(value: object) -> list[str]:
+    allowed = {"markdown", "html", "csv", "notion"}
+    result: list[str] = []
+    for item in _string_list(value):
+        normalized = item.strip().lower()
+        if normalized == "excel":
+            normalized = "csv"
+        if normalized in allowed and normalized not in result:
+            result.append(normalized)
+    return result or ["markdown"]
 
 
 def _default_config_template(config_path: Path, vault_path: Path) -> str:
@@ -214,6 +263,15 @@ base_url = "https://api.deepseek.com/v1"
 api_key = ""
 model = "deepseek-chat"
 language = "zh-CN"
+
+[outputs]
+formats = ["markdown"]
+html_dir = "{(config_path.parent / "exports" / "html").as_posix()}"
+csv_path = "{(config_path.parent / "exports" / "notes-index.csv").as_posix()}"
+notion_token = ""
+notion_database_id = ""
+notion_title_property = "Name"
+notion_api_base = "https://api.notion.com/v1"
 
 [routing]
 enabled = true

@@ -24,6 +24,10 @@ class ConfigTemplatesTest(unittest.TestCase):
                 self.assertEqual(folders, expected)
                 self.assertNotIn("英语学习", folders)
                 self.assertNotIn("毕业前的30件事", folders)
+                self.assertEqual(data["outputs"]["formats"], ["markdown"])
+                self.assertIn("html_dir", data["outputs"])
+                self.assertIn("csv_path", data["outputs"])
+                self.assertIn("notion_database_id", data["outputs"])
 
 
 if __name__ == "__main__":

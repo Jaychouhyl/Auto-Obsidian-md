@@ -1,6 +1,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 use crate::logs::{recent_logs, LogFile};
 use crate::project::{feeds_txt, links_txt};
@@ -36,6 +41,48 @@ fn run_account_json(args: &[String], long_running: bool) -> Result<Value, String
     json_result(result)
 }
 
+fn open_os_path(path: PathBuf) -> Result<(), String> {
+    let target = if path.exists() {
+        path
+    } else {
+        path.parent()
+            .map(PathBuf::from)
+            .ok_or_else(|| "Path does not exist and has no parent directory".to_string())?
+    };
+    if !target.exists() {
+        return Err(format!("Path does not exist: {}", target.display()));
+    }
+
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        Command::new("explorer.exe")
+            .arg(target)
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(target)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open")
+            .arg(target)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ToolConfigDraft {
     yt_dlp: String,
@@ -44,6 +91,17 @@ pub struct ToolConfigDraft {
     douyin_config: String,
     whisper: String,
     funasr: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OutputsConfigDraft {
+    formats: Vec<String>,
+    html_dir: String,
+    csv_path: String,
+    notion_token: String,
+    notion_database_id: String,
+    notion_title_property: String,
+    notion_api_base: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,6 +123,7 @@ pub struct AppConfigDraft {
     fallback_folder: String,
     allowed_folders: Vec<String>,
     tools: ToolConfigDraft,
+    outputs: OutputsConfigDraft,
 }
 
 #[derive(Debug, Serialize)]
@@ -126,9 +185,31 @@ fn render_config(draft: &AppConfigDraft) -> String {
         .map(|folder| format!("    {},", toml_string(folder)))
         .collect::<Vec<_>>()
         .join("\n");
+    let output_formats = draft
+        .outputs
+        .formats
+        .iter()
+        .map(|format| format.trim().to_lowercase())
+        .filter(|format| matches!(format.as_str(), "markdown" | "html" | "csv" | "notion"))
+        .fold(Vec::<String>::new(), |mut acc, format| {
+            if !acc.contains(&format) {
+                acc.push(format);
+            }
+            acc
+        });
+    let output_formats = if output_formats.is_empty() {
+        vec!["markdown".to_string()]
+    } else {
+        output_formats
+    };
+    let output_format_lines = output_formats
+        .iter()
+        .map(|format| toml_string(format))
+        .collect::<Vec<_>>()
+        .join(", ");
 
     format!(
-        "[paths]\nqueue_db = {}\ncache_dir = {}\n\n[obsidian]\nmode = {}\nvault_path = {}\nfolder = {}\nrest_base_url = {}\nrest_api_key = {}\n\n[tools]\nyt_dlp = {}\nffmpeg = {}\ndouyin_downloader = {}\ndouyin_config = {}\nwhisper = {}\nfunasr = {}\n\n[llm]\nenabled = {}\nprovider = {}\nbase_url = {}\napi_key = {}\nmodel = {}\nlanguage = {}\n\n[routing]\nenabled = {}\nfallback_folder = {}\nallowed_folders = [\n{}\n]\n",
+        "[paths]\nqueue_db = {}\ncache_dir = {}\n\n[obsidian]\nmode = {}\nvault_path = {}\nfolder = {}\nrest_base_url = {}\nrest_api_key = {}\n\n[tools]\nyt_dlp = {}\nffmpeg = {}\ndouyin_downloader = {}\ndouyin_config = {}\nwhisper = {}\nfunasr = {}\n\n[llm]\nenabled = {}\nprovider = {}\nbase_url = {}\napi_key = {}\nmodel = {}\nlanguage = {}\n\n[outputs]\nformats = [{}]\nhtml_dir = {}\ncsv_path = {}\nnotion_token = {}\nnotion_database_id = {}\nnotion_title_property = {}\nnotion_api_base = {}\n\n[routing]\nenabled = {}\nfallback_folder = {}\nallowed_folders = [\n{}\n]\n",
         toml_string(&draft.queue_db),
         toml_string(&draft.cache_dir),
         toml_string(&draft.obsidian_mode),
@@ -148,6 +229,13 @@ fn render_config(draft: &AppConfigDraft) -> String {
         toml_string(&draft.llm_api_key),
         toml_string(&draft.llm_model),
         toml_string(&draft.llm_language),
+        output_format_lines,
+        toml_string(&draft.outputs.html_dir),
+        toml_string(&draft.outputs.csv_path),
+        toml_string(&draft.outputs.notion_token),
+        toml_string(&draft.outputs.notion_database_id),
+        toml_string(&draft.outputs.notion_title_property),
+        toml_string(&draft.outputs.notion_api_base),
         toml_bool(draft.routing_enabled),
         toml_string(&draft.fallback_folder),
         folder_lines,
@@ -254,6 +342,15 @@ pub fn save_app_config(draft: AppConfigDraft) -> Result<CommandResult, String> {
     if draft.rest_api_key.trim().is_empty() {
         draft.rest_api_key = existing_toml_value(&existing, "rest_api_key").unwrap_or_default();
     }
+    if draft.outputs.notion_token.trim().is_empty() {
+        draft.outputs.notion_token = existing_toml_value(&existing, "notion_token").unwrap_or_default();
+    }
+    if draft.outputs.notion_database_id.trim().is_empty()
+        || draft.outputs.notion_database_id.trim() == "configured"
+    {
+        draft.outputs.notion_database_id =
+            existing_toml_value(&existing, "notion_database_id").unwrap_or_default();
+    }
     fs::write(&config_path, render_config(&draft)).map_err(|error| error.to_string())?;
     Ok(CommandResult {
         ok: true,
@@ -261,6 +358,90 @@ pub fn save_app_config(draft: AppConfigDraft) -> Result<CommandResult, String> {
         stdout: format!("Saved config: {}", config_path.display()),
         stderr: String::new(),
     })
+}
+
+#[tauri::command]
+pub fn open_path(path: String) -> Result<CommandResult, String> {
+    open_os_path(PathBuf::from(path.clone()))?;
+    Ok(CommandResult {
+        ok: true,
+        code: 0,
+        stdout: format!("Opened: {}", path),
+        stderr: String::new(),
+    })
+}
+
+#[tauri::command]
+pub fn open_output(kind: String) -> Result<CommandResult, String> {
+    let status = get_status()?;
+    let path = match kind.as_str() {
+        "project" => status
+            .pointer("/paths/project_root")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+        "vault" => status
+            .pointer("/paths/obsidian_vault")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+        "html" => status
+            .pointer("/outputs/html_dir")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+        "csv" => status
+            .pointer("/outputs/csv_path")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+        "cache" => status
+            .pointer("/paths/cache_dir")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+        "queue" => status
+            .pointer("/paths/queue_db")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+        _ => return Err(format!("Unsupported output kind: {}", kind)),
+    };
+    if path.trim().is_empty() {
+        return Err(format!("No path configured for output kind: {}", kind));
+    }
+    let path_buf = PathBuf::from(path);
+    if kind == "html" && !path_buf.exists() {
+        fs::create_dir_all(&path_buf).map_err(|error| error.to_string())?;
+    }
+    if kind == "csv" && !path_buf.exists() {
+        if let Some(parent) = path_buf.parent() {
+            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+    }
+    open_os_path(path_buf)?;
+    Ok(CommandResult {
+        ok: true,
+        code: 0,
+        stdout: format!("Opened {}", kind),
+        stderr: String::new(),
+    })
+}
+
+#[tauri::command]
+pub fn backup_project() -> Result<CommandResult, String> {
+    run_ingest(&[
+        "backup".into(),
+        "--json".into(),
+        "--config".into(),
+        config_arg(),
+    ])
+}
+
+#[tauri::command]
+pub fn restore_project(backup_file: String) -> Result<CommandResult, String> {
+    run_ingest(&[
+        "restore".into(),
+        backup_file,
+        "--yes".into(),
+        "--json".into(),
+        "--config".into(),
+        config_arg(),
+    ])
 }
 
 #[tauri::command]

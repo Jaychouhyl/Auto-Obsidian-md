@@ -34,6 +34,21 @@ def run_doctor(config: AppConfig) -> list[DoctorCheck]:
         llm_detail = "disabled"
     checks.append(DoctorCheck("llm_api_key", (not config.llm.enabled) or bool(config.llm.api_key), llm_detail))
     checks.append(DoctorCheck("obsidian_rest_key", config.obsidian.mode != "rest" or bool(config.obsidian.rest_api_key), "required only in rest mode"))
+    output_formats = set(config.outputs.formats)
+    checks.append(
+        DoctorCheck(
+            "output_formats",
+            bool(output_formats & {"markdown", "html", "csv", "notion"}),
+            ", ".join(config.outputs.formats),
+        )
+    )
+    checks.append(
+        DoctorCheck(
+            "notion_credentials",
+            "notion" not in output_formats or bool(config.outputs.notion_token and config.outputs.notion_database_id),
+            "required only when Notion output is enabled",
+        )
+    )
     return checks
 
 

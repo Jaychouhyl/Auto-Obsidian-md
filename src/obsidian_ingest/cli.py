@@ -7,6 +7,7 @@ from pathlib import Path
 from .accounts.models import Platform
 from .accounts.providers.base import AccountIdentityError
 from .accounts.service import AccountService, AccountServiceError, account_to_dict
+from .backup import create_project_backup, restore_project_backup
 from .collectors.directory import collect_directory
 from .collectors.douyin import collect_douyin_favorites
 from .collectors.inbox import collect_inbox
@@ -70,6 +71,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_accounts(args)
     if args.command == "dependencies":
         return _cmd_dependencies(args)
+    if args.command == "backup":
+        return _cmd_backup(args)
+    if args.command == "restore":
+        return _cmd_restore(args)
     parser.print_help()
     return 1
 
@@ -208,6 +213,17 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["yt-dlp", "ffmpeg"],
         help="Install one managed tool. Repeat to install multiple tools. Defaults to all managed tools.",
     )
+
+    backup = subparsers.add_parser("backup", help="Create a local project backup")
+    backup.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
+    backup.add_argument("--output-dir", default="")
+    backup.add_argument("--json", action="store_true")
+
+    restore = subparsers.add_parser("restore", help="Restore config, queue, and account files from a backup")
+    restore.add_argument("backup_file")
+    restore.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
+    restore.add_argument("--yes", action="store_true", help="Confirm overwrite of local project files")
+    restore.add_argument("--json", action="store_true")
     return parser
 
 
@@ -263,7 +279,17 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     config.paths.queue_db.parent.mkdir(parents=True, exist_ok=True)
     checks = run_doctor(config)
     if args.json:
-        required_checks = {"config", "queue_db_parent", "cache_dir", "obsidian_mode", "obsidian_vault", "llm_api_key", "obsidian_rest_key"}
+        required_checks = {
+            "config",
+            "queue_db_parent",
+            "cache_dir",
+            "obsidian_mode",
+            "obsidian_vault",
+            "llm_api_key",
+            "obsidian_rest_key",
+            "output_formats",
+            "notion_credentials",
+        }
         payload = {
             "ok": all(check.ok for check in checks if check.name in required_checks),
             "checks": [
@@ -326,6 +352,9 @@ def _cmd_collect_douyin(args: argparse.Namespace) -> int:
         "run_id": result.run_id,
         "download_dir": str(result.download_dir),
         "queued": result.queued,
+        "requested": result.requested,
+        "returned": result.returned,
+        "attempts": result.attempts,
         "files": result.files,
         "notes": result.notes,
     }
@@ -604,6 +633,50 @@ def _cmd_dependencies(args: argparse.Namespace) -> int:
 
     print(f"Unsupported dependencies action: {args.dependency_action}")
     return 1
+
+
+def _cmd_backup(args: argparse.Namespace) -> int:
+    result = create_project_backup(
+        Path(args.config),
+        Path(args.output_dir) if args.output_dir else None,
+    )
+    payload = {
+        "status": "done",
+        "backup_path": str(result.backup_path),
+        "included": result.included,
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Wrote backup: {result.backup_path}")
+    return 0
+
+
+def _cmd_restore(args: argparse.Namespace) -> int:
+    if not args.yes:
+        payload = {
+            "status": "failed",
+            "error": {
+                "code": "restore_confirmation_required",
+                "message": "Restore overwrites local config, queue, and account files. Re-run with --yes after confirming.",
+            },
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(payload["error"]["message"])
+        return 2
+    result = restore_project_backup(Path(args.config), Path(args.backup_file))
+    payload = {
+        "status": "done",
+        "backup_path": str(result.backup_path),
+        "restored": result.restored,
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Restored {len(result.restored)} file(s) from {result.backup_path}")
+    return 0
 
 
 def _print_account_payload(payload: dict[str, object], json_output: bool) -> None:

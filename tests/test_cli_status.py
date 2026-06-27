@@ -35,6 +35,9 @@ class CliStatusTest(unittest.TestCase):
             self.assertEqual(payload["obsidian"]["mode"], "local")
             self.assertIn("rest_base_url", payload["obsidian"])
             self.assertEqual(payload["llm"]["language"], "zh-CN")
+            self.assertEqual(payload["outputs"]["formats"], ["markdown"])
+            self.assertTrue(payload["outputs"]["html_dir"].replace("\\", "/").endswith("exports/html"))
+            self.assertFalse(payload["outputs"]["notion_configured"])
 
     def test_queue_json_lists_recent_items(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

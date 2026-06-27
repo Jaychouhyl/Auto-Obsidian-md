@@ -3,7 +3,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from obsidian_ingest.obsidian_writer import LocalVaultWriter, ObsidianRestWriter, make_safe_filename
+from obsidian_ingest.obsidian_writer import (
+    CsvIndexWriter,
+    HtmlDirectoryWriter,
+    LocalVaultWriter,
+    NotionDatabaseWriter,
+    ObsidianRestWriter,
+    make_safe_filename,
+)
 
 
 class ObsidianWriterTest(unittest.TestCase):
@@ -61,6 +68,58 @@ class ObsidianWriterTest(unittest.TestCase):
         self.assertEqual(requests[0].headers["Authorization"], "Bearer secret")
         self.assertEqual(requests[0].headers["Content-type"], "text/markdown")
         self.assertEqual(requests[0].data.decode("utf-8"), "# Body")
+
+    def test_html_writer_exports_readable_html_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            writer = HtmlDirectoryWriter(Path(tmp))
+
+            result = writer.write_note("HTML Test", "# Title\n\n- point", folder="Exports")
+
+            self.assertEqual(result.relative_path, "Exports/HTML Test.html")
+            text = (Path(tmp) / result.relative_path).read_text(encoding="utf-8")
+            self.assertIn("<h1>Title</h1>", text)
+            self.assertIn("<li>point</li>", text)
+
+    def test_csv_writer_appends_excel_compatible_index(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "index.csv"
+            writer = CsvIndexWriter(path)
+
+            writer.write_note("CSV Test", "# Title\n\nBody text", folder="Inbox")
+
+            text = path.read_text(encoding="utf-8-sig")
+            self.assertIn("created_at,title,folder,filename,excerpt", text)
+            self.assertIn("CSV Test,Inbox,CSV Test.md", text)
+
+    def test_notion_writer_creates_database_page(self):
+        requests = []
+
+        def fake_urlopen(request, timeout=0):
+            requests.append(request)
+
+            class Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+                def read(self):
+                    return b'{"id":"page-123"}'
+
+            return Response()
+
+        writer = NotionDatabaseWriter("secret", "db-123", title_property="Name")
+        with patch("urllib.request.urlopen", fake_urlopen):
+            result = writer.write_note("Notion Test", "# Heading\n\n- point", folder="Inbox")
+
+        self.assertEqual(result.relative_path, "notion://page-123")
+        self.assertEqual(requests[0].method, "POST")
+        self.assertEqual(requests[0].full_url, "https://api.notion.com/v1/pages")
+        self.assertEqual(requests[0].headers["Authorization"], "Bearer secret")
+        payload = requests[0].data.decode("utf-8")
+        self.assertIn('"database_id": "db-123"', payload)
+        self.assertIn('"content": "Notion Test"', payload)
 
 
 if __name__ == "__main__":

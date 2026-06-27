@@ -53,10 +53,20 @@ fn workspace_dir() -> PathBuf {
     if let Some(value) = env::var_os("OBSIDIAN_INGEST_HOME") {
         return PathBuf::from(value);
     }
+
+    if let Some(root) = installed_project_root() {
+        return root;
+    }
+
+    let source_root = repo_root();
+    if source_root.join("config.toml").is_file() {
+        return source_root;
+    }
+
     if let Some(value) = env::var_os("LOCALAPPDATA") {
         return PathBuf::from(value).join("Obsidian Ingest Studio");
     }
-    repo_root().join(".local-workspace")
+    source_root.join(".local-workspace")
 }
 
 fn repo_root() -> PathBuf {
@@ -65,6 +75,17 @@ fn repo_root() -> PathBuf {
         .and_then(Path::parent)
         .map(Path::to_path_buf)
         .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+}
+
+fn installed_project_root() -> Option<PathBuf> {
+    let current_exe = env::current_exe().ok()?;
+    let app_dir = current_exe.parent()?;
+    for ancestor in app_dir.ancestors() {
+        if ancestor.join("config.toml").is_file() && ancestor.join("desktop").is_dir() {
+            return Some(ancestor.to_path_buf());
+        }
+    }
+    None
 }
 
 fn first_existing(dir: &Path, names: &[&str]) -> Option<PathBuf> {

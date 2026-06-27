@@ -49,6 +49,22 @@ export async function saveAppConfig(draft: AppConfigDraft): Promise<CommandResul
   return invoke<CommandResult>("save_app_config", { draft });
 }
 
+export async function openPath(path: string): Promise<CommandResult> {
+  return invoke<CommandResult>("open_path", { path });
+}
+
+export async function openOutput(kind: string): Promise<CommandResult> {
+  return invoke<CommandResult>("open_output", { kind });
+}
+
+export async function backupProject(): Promise<CommandResult> {
+  return invoke<CommandResult>("backup_project");
+}
+
+export async function restoreProject(backupFile: string): Promise<CommandResult> {
+  return invoke<CommandResult>("restore_project", { backupFile });
+}
+
 export async function getSourceFiles(): Promise<SourceFiles> {
   return invoke<SourceFiles>("get_source_files");
 }

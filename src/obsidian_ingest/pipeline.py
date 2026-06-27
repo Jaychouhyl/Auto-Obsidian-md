@@ -10,7 +10,14 @@ from .collectors.douyin import copy_config_with_account
 from .acquire import AcquisitionRequest, acquire_source
 from .config import AppConfig
 from .markdown import NotePayload, render_markdown_note
-from .obsidian_writer import LocalVaultWriter, ObsidianRestWriter
+from .obsidian_writer import (
+    CsvIndexWriter,
+    HtmlDirectoryWriter,
+    LocalVaultWriter,
+    MultiWriter,
+    NotionDatabaseWriter,
+    ObsidianRestWriter,
+)
 from .queue_store import QueueItem, QueueStore
 from .summarize import summarize_transcript
 from .transcribe import transcribe_source
@@ -130,6 +137,24 @@ def _note_incomplete(acquired, transcription) -> bool:
 
 
 def build_writer(config: AppConfig):
+    formats = set(config.outputs.formats)
     if config.obsidian.mode == "rest":
-        return ObsidianRestWriter(config.obsidian.rest_base_url, config.obsidian.rest_api_key, config.obsidian.folder)
-    return LocalVaultWriter(config.obsidian.vault_path, config.obsidian.folder)
+        primary = ObsidianRestWriter(config.obsidian.rest_base_url, config.obsidian.rest_api_key, config.obsidian.folder)
+    else:
+        primary = LocalVaultWriter(config.obsidian.vault_path, config.obsidian.folder)
+
+    secondary = []
+    if "html" in formats:
+        secondary.append(HtmlDirectoryWriter(config.outputs.html_dir))
+    if "csv" in formats:
+        secondary.append(CsvIndexWriter(config.outputs.csv_path))
+    if "notion" in formats:
+        secondary.append(
+            NotionDatabaseWriter(
+                config.outputs.notion_token,
+                config.outputs.notion_database_id,
+                config.outputs.notion_title_property,
+                config.outputs.notion_api_base,
+            )
+        )
+    return MultiWriter(primary, secondary) if secondary else primary
