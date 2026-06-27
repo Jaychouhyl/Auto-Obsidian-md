@@ -737,7 +737,6 @@ function renderOutputConfig(draft: AppConfigDraft): string {
         ${field("Notion 标题属性", "cfg-output-notion-title", draft.outputs.notion_title_property)}
         ${field("Notion API Base", "cfg-output-notion-api", draft.outputs.notion_api_base)}
       </div>
-      <p class="muted">Markdown 是主输出；HTML 会生成独立网页文件；Excel/CSV 会追加索引；Notion 需要 Token 和 Database ID。</p>
     </section>
   `;
 }
@@ -759,7 +758,7 @@ function renderBackupPanel(): string {
         ${field("备份 zip 路径", "restore-backup-path", "")}
         <button id="restore-project" ${disabledAttr()}>恢复备份</button>
       </div>
-      <p class="muted">备份包含配置、队列数据库、账号资料、链接/RSS 文件和抖音配置；不要把备份包公开分享。</p>
+      <p class="muted">备份包可能包含本机配置和登录态，请勿公开分享。</p>
     </section>
   `;
 }
@@ -786,7 +785,6 @@ function renderSetupStatus(): string {
 function renderSetupWizard(): string {
   const status = state.status;
   const requiredIssues = state.doctor?.checks.filter((check) => check.required && !check.ok).length ?? 0;
-  const dependencyMissing = state.dependencies?.summary.missing ?? 0;
   const steps = [
     {
       label: "输出目录",
@@ -813,7 +811,7 @@ function renderSetupWizard(): string {
     {
       label: "依赖",
       status: requiredIssues === 0 ? "done" : "todo",
-      text: requiredIssues === 0 ? `核心依赖可用，可选缺失 ${dependencyMissing} 项` : `${requiredIssues} 项必须处理`,
+      text: requiredIssues === 0 ? "核心依赖可用" : `${requiredIssues} 项必须处理`,
       action: "dependencies",
     },
     {
@@ -913,11 +911,6 @@ function renderRunView(): string {
         <button id="retry-failed" ${disabledAttr()}>重试失败项</button>
         <button id="scan-inbox" ${disabledAttr()}>扫描 inbox</button>
       </div>
-      <div class="hint-panel">
-        <b>抖音收藏顺序</b>
-        <p>程序会按 douyin-dl 写出的下载 manifest 顺序入队；这个顺序通常接近收藏页/下载器返回顺序，但抖音页面未稳定暴露“收藏时间”字段，所以不能保证严格按收藏时间排序。</p>
-        <p>“抖音数量”是请求上限。程序会最多跑 3 轮下载器并按作品 ID 去重；如果输入 30 但最终入队仍只有 5 条，说明本次账号可见范围或下载器多轮返回的是同一批内容，界面会显示请求数、返回数、入队数和轮数。</p>
-      </div>
       ${renderMessageArea()}
     </section>
   `;
@@ -959,10 +952,6 @@ function renderAccountsView(): string {
           <h1>账号</h1>
         </div>
         <button id="refresh" ${disabledAttr()}>刷新</button>
-      </div>
-      <div class="hint-panel">
-        <b>账号存储位置</b>
-        <p>${escapeHtml(state.status?.paths.project_root ?? "")}\\accounts。这里显示的是当前桌面应用真实读取到的账号；如果这里是 0，说明应用没有读到项目目录或还没有保存账号。</p>
       </div>
       <div class="account-platforms">
         ${platforms.map(renderAccountPlatform).join("")}
@@ -1347,7 +1336,6 @@ function renderBanner(): string {
         </span>
       </div>
       <ul class="banner-list">${items}</ul>
-      <small class="muted">可选工具不会再弹到顶部横幅；例如 funasr 缺失只会影响可选转写路线，不影响 Whisper 和网页/RSS/本地文本入库。</small>
     </div>
   `;
 }
