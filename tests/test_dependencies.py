@@ -7,6 +7,7 @@ import unittest
 import zipfile
 import contextlib
 from pathlib import Path
+from unittest.mock import patch
 
 from obsidian_ingest.cli import main
 from obsidian_ingest.config import load_config, write_default_config
@@ -21,11 +22,12 @@ class DependencyManagementTest(unittest.TestCase):
             write_default_config(config_path, root / "vault")
             config = load_config(config_path)
 
-            report = dependency_report(
-                config,
-                command_resolver=lambda _command: None,
-                edge_finder=lambda: None,
-            )
+            with patch("obsidian_ingest.dependencies._is_windows", return_value=True):
+                report = dependency_report(
+                    config,
+                    command_resolver=lambda _command: None,
+                    edge_finder=lambda: None,
+                )
 
             by_id = {item["id"]: item for item in report["items"]}
             self.assertEqual(by_id["yt-dlp"]["status"], "missing")
@@ -45,7 +47,8 @@ class DependencyManagementTest(unittest.TestCase):
 
             before = config_path.read_text(encoding="utf-8")
             config = load_config(config_path)
-            result = install_managed_dependencies(config, tool_ids=["yt-dlp", "ffmpeg"], dry_run=True)
+            with patch("obsidian_ingest.dependencies._is_windows", return_value=True):
+                result = install_managed_dependencies(config, tool_ids=["yt-dlp", "ffmpeg"], dry_run=True)
 
             self.assertEqual([item["id"] for item in result["planned"]], ["yt-dlp", "ffmpeg"])
             self.assertEqual(result["installed"], [])
@@ -69,11 +72,12 @@ class DependencyManagementTest(unittest.TestCase):
                 else:
                     target.write_text("yt-dlp", encoding="utf-8")
 
-            result = install_managed_dependencies(
-                config,
-                tool_ids=["yt-dlp", "ffmpeg"],
-                downloader=fake_download,
-            )
+            with patch("obsidian_ingest.dependencies._is_windows", return_value=True):
+                result = install_managed_dependencies(
+                    config,
+                    tool_ids=["yt-dlp", "ffmpeg"],
+                    downloader=fake_download,
+                )
 
             self.assertEqual([item["id"] for item in result["installed"]], ["yt-dlp", "ffmpeg"])
             updated = load_config(config_path)
