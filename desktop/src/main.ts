@@ -9,9 +9,11 @@ import {
   confirmAccountLogin,
   deleteAccount,
   getAccounts,
+  getDependencies,
   getQueue,
   getSourceFiles,
   getStatus,
+  installDependencies,
   importLinks,
   knowledgeMaintenance,
   listRecentLogs,
@@ -54,6 +56,7 @@ async function refresh(): Promise<void> {
     const status = await getStatus();
     state.status = status;
     state.configDraft = draftFromStatus(status);
+    state.dependencies = await getDependencies();
     state.sourceFiles = await getSourceFiles();
     state.queue = await getQueue(80, state.queueStatus);
     state.logs = await listRecentLogs(30);
@@ -137,6 +140,7 @@ async function reloadData(): Promise<void> {
   const status = await getStatus();
   state.status = status;
   state.configDraft = draftFromStatus(status);
+  state.dependencies = await getDependencies();
   state.sourceFiles = await getSourceFiles();
   state.queue = await getQueue(80, state.queueStatus);
   state.logs = await listRecentLogs(30);
@@ -219,6 +223,32 @@ async function handleDoctorJson(): Promise<void> {
   try {
     state.doctor = await runDoctorJson();
     setMessage(state.doctor.ok ? "健康检查通过" : "健康检查有警告");
+  } catch (error) {
+    setError(error instanceof Error ? error.message : String(error));
+  } finally {
+    setBusy(false);
+    render();
+  }
+}
+
+async function handleInstallDependencies(): Promise<void> {
+  const installable = state.dependencies?.items
+    .filter((item) => item.status !== "ready" && item.installable)
+    .map((item) => item.id) ?? [];
+  if (!installable.length) {
+    setMessage("没有可自动安装的缺失依赖。");
+    render();
+    return;
+  }
+  setBusy(true);
+  setMessage("正在下载并配置依赖...");
+  render();
+  try {
+    const result = await installDependencies(installable);
+    const installed = result.installed.map((item) => `${item.label}: ${item.path}`).join("\n");
+    setMessage(installed ? `依赖已配置：\n${installed}` : "依赖安装流程完成。");
+    await reloadData();
+    await loadDoctorSilently();
   } catch (error) {
     setError(error instanceof Error ? error.message : String(error));
   } finally {
@@ -453,6 +483,7 @@ async function setQueueStatus(status: QueueStatus): Promise<void> {
 function renderNav(): string {
   const items: Array<[typeof state.activeView, string]> = [
     ["setup", "配置"],
+    ["dependencies", "依赖"],
     ["run", "运行"],
     ["accounts", "账号"],
     ["sources", "导入"],
@@ -473,6 +504,7 @@ function renderNav(): string {
 
 function renderView(): string {
   if (state.activeView === "setup") return renderSetupView();
+  if (state.activeView === "dependencies") return renderDependenciesView();
   if (state.activeView === "run") return renderRunView();
   if (state.activeView === "accounts") return renderAccountsView();
   if (state.activeView === "sources") return renderSourcesView();
@@ -509,6 +541,48 @@ function renderSetupView(): string {
       ${renderDoctorReport()}
       ${renderMessageArea()}
     </section>
+  `;
+}
+
+function renderDependenciesView(): string {
+  const report = state.dependencies;
+  if (!report) return renderLoadingView("依赖");
+  const installableMissing = report.items.filter((item) => item.status !== "ready" && item.installable);
+  return `
+    <section class="view">
+      <div class="view-header">
+        <h1>依赖</h1>
+        <div class="toolbar">
+          <button id="install-dependencies" ${disabledAttr()} ${installableMissing.length ? "" : "disabled"}>安装缺失工具</button>
+          <button id="refresh-dependencies" ${disabledAttr()}>重新检测</button>
+        </div>
+      </div>
+      <div class="dependency-summary">
+        <div><b>${report.summary.ready}</b><span>可用</span></div>
+        <div><b>${report.summary.missing}</b><span>待处理</span></div>
+        <div><b>${report.summary.installable_missing}</b><span>可自动安装</span></div>
+      </div>
+      <div class="dependency-grid">
+        ${report.items.map(renderDependencyItem).join("")}
+      </div>
+      ${renderMessageArea()}
+    </section>
+  `;
+}
+
+function renderDependencyItem(item: { id: string; label: string; status: string; installable: boolean; purpose: string; resolved_path: string; configured: string; manual_action: string; managed_target: string }): string {
+  const ready = item.status === "ready";
+  const detail = item.resolved_path || item.configured || item.manual_action;
+  return `
+    <div class="dependency-item ${ready ? "ready" : "missing"}">
+      <div class="dependency-head">
+        <h2>${escapeHtml(item.label)}</h2>
+        <span class="badge ${ready ? "done" : item.installable ? "pending" : "failed"}">${ready ? "可用" : item.installable ? "可安装" : "手动"}</span>
+      </div>
+      <p>${escapeHtml(item.purpose)}</p>
+      <small>${escapeHtml(detail)}</small>
+      ${!ready && item.installable ? `<small>将安装到：${escapeHtml(item.managed_target)}</small>` : ""}
+    </div>
   `;
 }
 
@@ -910,6 +984,7 @@ function renderBanner(): string {
       <div class="banner-head">
         <b>环境检查发现 ${issues.length} 项待处理</b>
         <span class="banner-actions">
+          <button data-view="dependencies">去依赖</button>
           <button data-view="setup">去配置</button>
           <button id="dismiss-banner">关闭</button>
         </span>
@@ -928,8 +1003,10 @@ function bindEvents(): void {
     button.addEventListener("click", () => void setQueueStatus(button.dataset.queueStatus as QueueStatus));
   });
   document.querySelector<HTMLButtonElement>("#refresh")?.addEventListener("click", refresh);
+  document.querySelector<HTMLButtonElement>("#refresh-dependencies")?.addEventListener("click", refresh);
   document.querySelector<HTMLButtonElement>("#save-config")?.addEventListener("click", () => void handleSaveConfig());
   document.querySelector<HTMLButtonElement>("#doctor-json")?.addEventListener("click", () => void handleDoctorJson());
+  document.querySelector<HTMLButtonElement>("#install-dependencies")?.addEventListener("click", () => void handleInstallDependencies());
   document.querySelector<HTMLButtonElement>("#doctor")?.addEventListener("click", () => runAction("doctor", runDoctor));
   document.querySelector<HTMLButtonElement>("#run-douyin")?.addEventListener("click", () => void handleDouyin());
   document.querySelector<HTMLButtonElement>("#run-links")?.addEventListener("click", () => void handleImportLinks());

@@ -6,6 +6,8 @@ import type {
   AccountsPayload,
   AppConfigDraft,
   CommandResult,
+  DependencyInstallResult,
+  DependencyReport,
   DoctorReport,
   LogFile,
   QueueItem,
@@ -29,6 +31,14 @@ export async function runDoctor(): Promise<CommandResult> {
 
 export async function runDoctorJson(): Promise<DoctorReport> {
   return invoke<DoctorReport>("run_doctor_json");
+}
+
+export async function getDependencies(): Promise<DependencyReport> {
+  return invoke<DependencyReport>("get_dependencies");
+}
+
+export async function installDependencies(tools: string[]): Promise<DependencyInstallResult> {
+  return invoke<DependencyInstallResult>("install_dependencies", { tools });
 }
 
 export async function getAppConfig(): Promise<StatusPayload> {

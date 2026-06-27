@@ -10,6 +10,7 @@ export const state: AppState = {
     feeds: "",
   },
   doctor: null,
+  dependencies: null,
   queue: [],
   logs: [],
   accounts: [],

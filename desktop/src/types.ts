@@ -129,6 +129,41 @@ export interface DoctorReport {
   checks: DoctorCheck[];
 }
 
+export interface DependencyItem {
+  id: string;
+  label: string;
+  status: "ready" | "missing";
+  configured: string;
+  resolved_path: string;
+  installable: boolean;
+  config_key: string;
+  purpose: string;
+  manual_action: string;
+  managed_target: string;
+}
+
+export interface DependencyReport {
+  status: string;
+  tools_dir: string;
+  items: DependencyItem[];
+  summary: {
+    ready: number;
+    missing: number;
+    installable_missing: number;
+  };
+  notes: string[];
+}
+
+export interface DependencyInstallResult {
+  status: string;
+  config_path: string;
+  tools_dir: string;
+  planned: Array<Record<string, string>>;
+  installed: Array<Record<string, string>>;
+  skipped: Array<Record<string, string>>;
+  dry_run: boolean;
+}
+
 export interface LogFile {
   name: string;
   path: string;
@@ -136,12 +171,13 @@ export interface LogFile {
 }
 
 export interface AppState {
-  activeView: "setup" | "run" | "accounts" | "sources" | "queue" | "rules" | "logs" | "knowledge" | "updates" | "settings";
+  activeView: "setup" | "dependencies" | "run" | "accounts" | "sources" | "queue" | "rules" | "logs" | "knowledge" | "updates" | "settings";
   queueStatus: QueueStatus;
   status: StatusPayload | null;
   configDraft: AppConfigDraft | null;
   sourceFiles: SourceFiles;
   doctor: DoctorReport | null;
+  dependencies: DependencyReport | null;
   queue: QueueItem[];
   logs: LogFile[];
   accounts: AccountProfile[];

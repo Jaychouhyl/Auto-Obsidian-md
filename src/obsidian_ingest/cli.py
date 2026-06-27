@@ -14,6 +14,12 @@ from .collectors.platform_lists import collect_platform_list
 from .collectors.rss import collect_rss_feeds
 from .collectors.webpage import collect_webpage
 from .config import DEFAULT_PROJECT_DIR, load_config, write_default_config
+from .dependencies import (
+    dependency_report,
+    format_dependency_report,
+    format_install_result,
+    install_managed_dependencies,
+)
 from .doctor import format_doctor, run_doctor
 from .json_output import queue_item_to_dict, status_payload
 from .knowledge import build_knowledge_maintenance
@@ -62,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_write_launcher(args)
     if args.command == "accounts":
         return _cmd_accounts(args)
+    if args.command == "dependencies":
+        return _cmd_dependencies(args)
     parser.print_help()
     return 1
 
@@ -184,6 +192,22 @@ def build_parser() -> argparse.ArgumentParser:
             action_parser.add_argument("--cookies", required=True)
             action_parser.add_argument("--name", default="")
             action_parser.add_argument("--user-id", default="")
+
+    dependencies = subparsers.add_parser("dependencies", help="Detect and install local helper tools")
+    dependency_actions = dependencies.add_subparsers(dest="dependency_action", required=True)
+    dependency_report_parser = dependency_actions.add_parser("report")
+    dependency_report_parser.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
+    dependency_report_parser.add_argument("--json", action="store_true")
+    dependency_install_parser = dependency_actions.add_parser("install")
+    dependency_install_parser.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
+    dependency_install_parser.add_argument("--json", action="store_true")
+    dependency_install_parser.add_argument("--dry-run", action="store_true")
+    dependency_install_parser.add_argument(
+        "--tool",
+        action="append",
+        choices=["yt-dlp", "ffmpeg"],
+        help="Install one managed tool. Repeat to install multiple tools. Defaults to all managed tools.",
+    )
     return parser
 
 
@@ -546,6 +570,40 @@ def _cmd_accounts(args: argparse.Namespace) -> int:
         return 1
     _print_account_payload(payload, args.json)
     return 0
+
+
+def _cmd_dependencies(args: argparse.Namespace) -> int:
+    config = load_config(Path(args.config))
+    if args.dependency_action == "report":
+        payload = dependency_report(config)
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(format_dependency_report(payload))
+        return 0
+
+    if args.dependency_action == "install":
+        try:
+            payload = install_managed_dependencies(
+                config,
+                tool_ids=args.tool,
+                dry_run=args.dry_run,
+            )
+        except Exception as exc:
+            payload = {"status": "failed", "error": {"code": "dependency_install_failed", "message": str(exc)}}
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=False, indent=2))
+            else:
+                print(f"Failed: {exc}")
+            return 1
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(format_install_result(payload))
+        return 0
+
+    print(f"Unsupported dependencies action: {args.dependency_action}")
+    return 1
 
 
 def _print_account_payload(payload: dict[str, object], json_output: bool) -> None:

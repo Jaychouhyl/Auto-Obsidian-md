@@ -210,6 +210,35 @@ pub fn run_doctor_json() -> Result<Value, String> {
 }
 
 #[tauri::command]
+pub fn get_dependencies() -> Result<Value, String> {
+    let result = run_ingest(&[
+        "dependencies".into(),
+        "report".into(),
+        "--json".into(),
+        "--config".into(),
+        config_arg(),
+    ])?;
+    json_result(result)
+}
+
+#[tauri::command]
+pub fn install_dependencies(tools: Vec<String>) -> Result<Value, String> {
+    let mut args = vec![
+        "dependencies".into(),
+        "install".into(),
+        "--json".into(),
+        "--config".into(),
+        config_arg(),
+    ];
+    for tool in tools {
+        args.push("--tool".into());
+        args.push(tool);
+    }
+    let result = run_ingest_with_timeout(&args, ACCOUNT_LOGIN_TIMEOUT)?;
+    json_result(result)
+}
+
+#[tauri::command]
 pub fn get_app_config() -> Result<Value, String> {
     get_status()
 }

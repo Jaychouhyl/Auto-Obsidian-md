@@ -12,6 +12,8 @@ pub fn run() {
             commands::get_queue,
             commands::run_doctor,
             commands::run_doctor_json,
+            commands::get_dependencies,
+            commands::install_dependencies,
             commands::get_app_config,
             commands::save_app_config,
             commands::get_source_files,

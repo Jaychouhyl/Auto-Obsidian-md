@@ -144,6 +144,8 @@ h2 {
 }
 
 .stat,
+.dependency-summary,
+.dependency-item,
 .panel,
 .log-row,
 .settings,
@@ -164,6 +166,64 @@ h2 {
   font-size: 34px;
   line-height: 1;
   margin-bottom: 8px;
+}
+
+.dependency-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.dependency-summary div {
+  display: grid;
+  gap: 4px;
+}
+
+.dependency-summary b {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.dependency-summary span,
+.dependency-item p,
+.dependency-item small {
+  color: #687580;
+}
+
+.dependency-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dependency-item {
+  display: grid;
+  gap: 8px;
+}
+
+.dependency-item.ready {
+  border-color: #9fd7cf;
+}
+
+.dependency-item.missing {
+  border-color: #e9cf87;
+}
+
+.dependency-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dependency-head h2,
+.dependency-item p {
+  margin: 0;
+}
+
+.dependency-item small {
+  overflow-wrap: anywhere;
 }
 
 .control-band {
@@ -564,6 +624,8 @@ th {
   }
 
   .stats,
+  .dependency-summary,
+  .dependency-grid,
   .form-grid,
   .split,
   .doctor-grid {

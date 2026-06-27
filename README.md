@@ -13,6 +13,7 @@
 - 队列维护：查看状态、重试失败项、跳过条目。
 - 桌面控制台：Tauri 本机应用，调用同一套 Python pipeline。
 - 统一账号中心：在软件内管理抖音、哔哩哔哩、YouTube、TikTok 多账号，并选择各平台当前账号。
+- 依赖中心：在软件内检测外部工具，一键托管安装 `yt-dlp` 和 `ffmpeg`，并写回配置。
 - Docker：提供可选的 CLI 容器运行方式。
 
 ## 目录结构
@@ -76,6 +77,10 @@ py -3 -m unittest discover -s tests -v
 
 # 机器可读健康检查
 .\run.ps1 doctor --json --config .\config.toml
+
+# 依赖检测与可托管工具安装
+.\run.ps1 dependencies report --json --config .\config.toml
+.\run.ps1 dependencies install --json --config .\config.toml
 ```
 
 ## 桌面控制台
@@ -92,15 +97,24 @@ py -3 -m unittest discover -s tests -v
 
 ### 处理功能的前置依赖（重要）
 
-安装包本身不含视频下载与转写工具。**只做网页剪藏、RSS、本地文本 / PDF 入库不需要额外安装**；但要下载并转写抖音 / B站 / YouTube 等音视频，机器上仍需自行安装这些外部工具，并在桌面端「配置 / 高级」里填好路径：
+安装包不要求 Docker、Python、Node.js、Rust 或 VS Code。**只做网页剪藏、RSS、本地文本 / PDF 入库不需要额外安装**；但要下载并转写抖音 / B站 / YouTube 等音视频，需要补齐媒体工具。
+
+桌面端「依赖」页会自动检测本机工具状态，并可一键下载和配置 `yt-dlp`、`ffmpeg` 到应用工作区：
+
+```text
+%LOCALAPPDATA%\Obsidian Ingest Studio\tools
+```
+
+仍需按提示手动处理的项目：
 
 | 用途 | 需要的工具 |
 | --- | --- |
-| 视频 / 音频下载 | `yt-dlp`、`ffmpeg`（抖音另需 `douyin-dl`） |
+| 抖音下载 | `douyin-dl` |
 | 语音转文字 | `whisper` 或 `FunASR` |
-| 摘要与自动分类 | 自己的 DeepSeek（或其它 OpenAI 兼容）API Key，填在「配置 → API Key」 |
+| 摘要与自动分类 | 自己的 DeepSeek（或其它 OpenAI 兼容）API Key |
+| 平台账号 | 在「账号」页用系统 Edge 登录 |
 
-装好后，在桌面端「配置 → 健康检查」（或命令行 `doctor`）确认每项为 OK，缺失项会显示 WARN，按提示补齐即可。未配置时仍能入库，但只会得到一条"未下载 / 未转写"的占位笔记。
+装好后，在桌面端「依赖」或「配置 → 健康检查」（命令行也可用 `dependencies report` / `doctor`）确认状态。未配置转写工具时仍能入库，但音视频会得到一条"未下载 / 未转写"的占位笔记。
 
 开发运行：
 
