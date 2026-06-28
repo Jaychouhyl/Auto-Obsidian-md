@@ -69,6 +69,16 @@ def status_payload(config: AppConfig, queue_counts: dict[str, int]) -> dict[str,
             "notion_title_property": config.outputs.notion_title_property,
             "notion_api_base": config.outputs.notion_api_base,
         },
+        "prompt": {
+            "active_template": config.prompt.active_template,
+            "custom_instruction": config.prompt.custom_instruction,
+        },
+        "note_template": {
+            "active_template": config.note_template.active_template,
+            "include_transcript": config.note_template.include_transcript,
+            "include_source_notes": config.note_template.include_source_notes,
+            "attribution_name": config.note_template.attribution_name,
+        },
     }
 
 

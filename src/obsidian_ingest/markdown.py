@@ -16,10 +16,15 @@ class NotePayload:
     routed_folder: str = ""
     tags: list[str] = field(default_factory=list)
     incomplete: bool = False
+    active_template: str = "study_note"
+    include_transcript: bool = True
+    include_source_notes: bool = True
+    attribution_name: str = "小黄狗"
 
 
 def render_markdown_note(item: QueueItem, payload: NotePayload) -> str:
     title = item.title or _title_from_url(item.url)
+    labels = _section_labels(payload.active_template)
     lines = [
         "---",
         f"source: {item.platform}",
@@ -34,30 +39,31 @@ def render_markdown_note(item: QueueItem, payload: NotePayload) -> str:
         "",
         f"# {title}",
         "",
-        "## 一句话总结",
+        labels["summary"],
         payload.summary.strip() or "待补充摘要。",
         "",
-        "## 核心知识点",
+        labels["points"],
     ]
     lines.extend(_bullet_lines(payload.key_points, fallback="待补充知识点。"))
-    lines.extend(["", "## 可执行清单"])
+    lines.extend(["", labels["actions"]])
     lines.extend(_bullet_lines(payload.action_items, fallback="待补充行动项。"))
 
-    if payload.source_notes:
+    if payload.include_source_notes and payload.source_notes:
         lines.extend(["", "## 处理备注"])
         lines.extend(_bullet_lines(payload.source_notes))
 
-    lines.extend(["", "## 原始转写", ""])
-    lines.append("```text")
-    lines.append(payload.transcript.strip() or "暂无转写。")
-    lines.append("```")
+    if payload.include_transcript:
+        lines.extend(["", "## 原始转写", ""])
+        lines.append("```text")
+        lines.append(payload.transcript.strip() or "暂无转写。")
+        lines.append("```")
     lines.extend(
         [
             "",
             "---",
             "",
             "> 自动化写的",
-            "> 署名：小黄狗",
+            f"> 署名：{payload.attribution_name.strip() or '小黄狗'}",
             "",
         ]
     )
@@ -69,6 +75,34 @@ def _bullet_lines(values: list[str], fallback: str | None = None) -> list[str]:
     if not cleaned and fallback:
         cleaned = [fallback]
     return [f"- {value}" for value in cleaned]
+
+
+def _section_labels(template: str) -> dict[str, str]:
+    templates = {
+        "review_card": {
+            "summary": "## 记忆线索",
+            "points": "## 需要掌握",
+            "actions": "## 复习任务",
+        },
+        "research_note": {
+            "summary": "## 研究问题",
+            "points": "## 方法与证据",
+            "actions": "## 后续验证",
+        },
+        "action_note": {
+            "summary": "## 目标",
+            "points": "## 判断依据",
+            "actions": "## 下一步行动",
+        },
+    }
+    return templates.get(
+        template.strip().lower(),
+        {
+            "summary": "## 一句话总结",
+            "points": "## 核心知识点",
+            "actions": "## 可执行清单",
+        },
+    )
 
 
 def _title_from_url(url: str) -> str:

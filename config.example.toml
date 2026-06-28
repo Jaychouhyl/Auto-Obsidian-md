@@ -34,6 +34,16 @@ notion_database_id = ""
 notion_title_property = "Name"
 notion_api_base = "https://api.notion.com/v1"
 
+[prompt]
+active_template = "learning"
+custom_instruction = ""
+
+[note_template]
+active_template = "study_note"
+include_transcript = true
+include_source_notes = true
+attribution_name = "小黄狗"
+
 [routing]
 enabled = true
 fallback_folder = "Inbox/Learning Inbox"

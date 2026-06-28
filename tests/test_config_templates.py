@@ -28,6 +28,11 @@ class ConfigTemplatesTest(unittest.TestCase):
                 self.assertIn("html_dir", data["outputs"])
                 self.assertIn("csv_path", data["outputs"])
                 self.assertIn("notion_database_id", data["outputs"])
+                self.assertEqual(data["prompt"]["active_template"], "learning")
+                self.assertEqual(data["note_template"]["active_template"], "study_note")
+                self.assertTrue(data["note_template"]["include_transcript"])
+                self.assertTrue(data["note_template"]["include_source_notes"])
+                self.assertEqual(data["note_template"]["attribution_name"], "小黄狗")
 
 
 if __name__ == "__main__":

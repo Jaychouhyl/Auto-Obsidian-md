@@ -70,6 +70,16 @@ export interface StatusPayload {
     notion_title_property: string;
     notion_api_base: string;
   };
+  prompt: {
+    active_template: string;
+    custom_instruction: string;
+  };
+  note_template: {
+    active_template: string;
+    include_transcript: boolean;
+    include_source_notes: boolean;
+    attribution_name: string;
+  };
 }
 
 export interface QueueItem {
@@ -112,6 +122,18 @@ export interface OutputsConfigDraft {
   notion_api_base: string;
 }
 
+export interface PromptConfigDraft {
+  active_template: string;
+  custom_instruction: string;
+}
+
+export interface NoteTemplateConfigDraft {
+  active_template: string;
+  include_transcript: boolean;
+  include_source_notes: boolean;
+  attribution_name: string;
+}
+
 export interface AppConfigDraft {
   queue_db: string;
   cache_dir: string;
@@ -131,6 +153,8 @@ export interface AppConfigDraft {
   allowed_folders: string[];
   tools: ToolConfigDraft;
   outputs: OutputsConfigDraft;
+  prompt: PromptConfigDraft;
+  note_template: NoteTemplateConfigDraft;
 }
 
 export interface SourceFiles {
@@ -191,8 +215,17 @@ export interface LogFile {
   modified_unix: number;
 }
 
+export interface ReleaseInfo {
+  tag: string;
+  version: string;
+  url: string;
+  assetName: string;
+  assetUrl: string;
+  isNewer: boolean;
+}
+
 export interface AppState {
-  activeView: "setup" | "dependencies" | "run" | "accounts" | "sources" | "queue" | "rules" | "logs" | "knowledge" | "updates" | "settings";
+  activeView: "setup" | "dependencies" | "run" | "accounts" | "sources" | "queue" | "templates" | "rules" | "logs" | "knowledge" | "updates" | "settings";
   queueStatus: QueueStatus;
   status: StatusPayload | null;
   configDraft: AppConfigDraft | null;
@@ -208,4 +241,5 @@ export interface AppState {
   error: string;
   bannerDismissed: boolean;
   appVersion: string;
+  latestRelease: ReleaseInfo | null;
 }

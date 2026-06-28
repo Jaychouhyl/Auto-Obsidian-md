@@ -20,6 +20,7 @@ export const state: AppState = {
   error: "",
   bannerDismissed: false,
   appVersion: "",
+  latestRelease: null,
 };
 
 export function setBusy(value: boolean): void {

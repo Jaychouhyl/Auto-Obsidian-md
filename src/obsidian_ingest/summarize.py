@@ -22,6 +22,8 @@ def build_openai_compatible_payload(
     language: str = "zh-CN",
     allowed_folders: list[str] | None = None,
     fallback_folder: str = "Inbox/Learning Inbox",
+    prompt_template: str = "learning",
+    custom_instruction: str = "",
 ) -> dict:
     folder_instruction = ""
     if allowed_folders:
@@ -30,6 +32,9 @@ def build_openai_compatible_payload(
             + json.dumps(allowed_folders, ensure_ascii=False)
             + f"\nIf uncertain, use: {fallback_folder}"
         )
+    template_instruction = _prompt_template_instruction(prompt_template)
+    if custom_instruction.strip():
+        template_instruction = f"{template_instruction}\nAdditional user rule: {custom_instruction.strip()}"
     payload = {
         "model": model,
         "temperature": 0.2,
@@ -42,6 +47,7 @@ def build_openai_compatible_payload(
                     "tags is a list of 3-6 concise Chinese topic keywords for retrieval; "
                     "each tag has no '#' prefix and no spaces inside. "
                     "folder is the Obsidian folder where this note should be filed."
+                    f"\nTemplate: {template_instruction}"
                 ),
             },
             {
@@ -65,13 +71,23 @@ def summarize_transcript(
     language: str = "zh-CN",
     allowed_folders: list[str] | None = None,
     fallback_folder: str = "Inbox/Learning Inbox",
+    prompt_template: str = "learning",
+    custom_instruction: str = "",
 ) -> SummaryResult:
     if not enabled or not api_key:
         result = fallback_summary(transcript, allowed_folders=allowed_folders, fallback_folder=fallback_folder)
         note = "LLM 未启用或未配置 API key，已使用本地规则摘要。"
         return SummaryResult(result.summary, result.key_points, result.action_items, result.notes + [note], result.folder, result.tags)
 
-    payload = build_openai_compatible_payload(model, transcript, language, allowed_folders, fallback_folder)
+    payload = build_openai_compatible_payload(
+        model,
+        transcript,
+        language,
+        allowed_folders,
+        fallback_folder,
+        prompt_template,
+        custom_instruction,
+    )
     request = urllib.request.Request(
         base_url.rstrip("/") + "/chat/completions",
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -122,6 +138,18 @@ def fallback_summary(
 def _split_sentences(text: str) -> list[str]:
     candidates = re.split(r"(?<=[。！？.!?])\s+|\n+", text)
     return [candidate.strip() for candidate in candidates if candidate.strip()]
+
+
+def _prompt_template_instruction(template: str) -> str:
+    templates = {
+        "learning": "Use a general learning-note structure: concept, why it matters, examples, retrieval tags, and next actions.",
+        "exam": "Focus on exam preparation: test points, mistakes to avoid, memorization cues, practice tasks, and review priority.",
+        "quant": "Focus on trading or quantitative learning: strategy logic, assumptions, risk, parameters, validation method, and pitfalls.",
+        "podcast": "Focus on a spoken discussion: speakers' claims, timeline, memorable ideas, disagreements, and follow-up actions.",
+        "paper": "Focus on research: problem, method, data, conclusion, limitations, reproducibility, and related questions.",
+        "web": "Focus on web article extraction: thesis, evidence, quotes to revisit, links, and personal interpretation.",
+    }
+    return templates.get(template.strip().lower(), templates["learning"])
 
 
 def _parse_json_object(content: str) -> dict:

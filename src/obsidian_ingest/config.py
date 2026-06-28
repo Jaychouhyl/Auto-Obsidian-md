@@ -61,6 +61,20 @@ class OutputsConfig:
 
 
 @dataclass(frozen=True)
+class PromptConfig:
+    active_template: str
+    custom_instruction: str
+
+
+@dataclass(frozen=True)
+class NoteTemplateConfig:
+    active_template: str
+    include_transcript: bool
+    include_source_notes: bool
+    attribution_name: str
+
+
+@dataclass(frozen=True)
 class AppConfig:
     config_path: Path
     paths: PathsConfig
@@ -69,6 +83,8 @@ class AppConfig:
     llm: LlmConfig
     routing: RoutingConfig
     outputs: OutputsConfig
+    prompt: PromptConfig
+    note_template: NoteTemplateConfig
 
 
 def _default_project_dir() -> Path:
@@ -108,6 +124,8 @@ def load_config(config_path: Path) -> AppConfig:
     llm = raw.get("llm", {})
     routing = raw.get("routing", {})
     outputs = raw.get("outputs", {})
+    prompt = raw.get("prompt", {})
+    note_template = raw.get("note_template", {})
     base_dir = config_path.parent
     fallback_folder = str(routing.get("fallback_folder", obsidian.get("folder", "Inbox/Learning Inbox")))
     allowed_folders = _string_list(routing.get("allowed_folders", []))
@@ -156,6 +174,16 @@ def load_config(config_path: Path) -> AppConfig:
             notion_database_id=str(outputs.get("notion_database_id", "")).strip(),
             notion_title_property=str(outputs.get("notion_title_property", "Name")).strip() or "Name",
             notion_api_base=str(outputs.get("notion_api_base", "https://api.notion.com/v1")).rstrip("/"),
+        ),
+        prompt=PromptConfig(
+            active_template=str(prompt.get("active_template", "learning")).strip() or "learning",
+            custom_instruction=str(prompt.get("custom_instruction", "")).strip(),
+        ),
+        note_template=NoteTemplateConfig(
+            active_template=str(note_template.get("active_template", "study_note")).strip() or "study_note",
+            include_transcript=bool(note_template.get("include_transcript", True)),
+            include_source_notes=bool(note_template.get("include_source_notes", True)),
+            attribution_name=str(note_template.get("attribution_name", "小黄狗")).strip() or "小黄狗",
         ),
     )
 
@@ -272,6 +300,16 @@ notion_token = ""
 notion_database_id = ""
 notion_title_property = "Name"
 notion_api_base = "https://api.notion.com/v1"
+
+[prompt]
+active_template = "learning"
+custom_instruction = ""
+
+[note_template]
+active_template = "study_note"
+include_transcript = true
+include_source_notes = true
+attribution_name = "小黄狗"
 
 [routing]
 enabled = true

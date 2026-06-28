@@ -93,6 +93,8 @@ def process_item(config: AppConfig, store: QueueStore, item: QueueItem) -> Pipel
             language=config.llm.language,
             allowed_folders=config.routing.allowed_folders if config.routing.enabled else None,
             fallback_folder=config.routing.fallback_folder or config.obsidian.folder,
+            prompt_template=config.prompt.active_template,
+            custom_instruction=config.prompt.custom_instruction,
         )
         target_folder = summary.folder if config.routing.enabled and summary.folder else config.obsidian.folder
         payload = NotePayload(
@@ -104,6 +106,10 @@ def process_item(config: AppConfig, store: QueueStore, item: QueueItem) -> Pipel
             routed_folder=target_folder,
             tags=summary.tags,
             incomplete=_note_incomplete(acquired, transcription),
+            active_template=config.note_template.active_template,
+            include_transcript=config.note_template.include_transcript,
+            include_source_notes=config.note_template.include_source_notes,
+            attribution_name=config.note_template.attribution_name,
         )
         note = render_markdown_note(item, payload)
         writer = build_writer(config)

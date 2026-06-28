@@ -53,6 +53,10 @@ export async function openPath(path: string): Promise<CommandResult> {
   return invoke<CommandResult>("open_path", { path });
 }
 
+export async function openUrl(url: string): Promise<CommandResult> {
+  return invoke<CommandResult>("open_url", { url });
+}
+
 export async function openOutput(kind: string): Promise<CommandResult> {
   return invoke<CommandResult>("open_output", { kind });
 }

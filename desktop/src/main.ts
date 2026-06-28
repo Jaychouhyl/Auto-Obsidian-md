@@ -19,6 +19,7 @@ import {
   knowledgeMaintenance,
   listRecentLogs,
   openOutput,
+  openUrl,
   processQueue,
   reloginAccount,
   retryFailed,
@@ -124,6 +125,16 @@ function draftFromStatus(status: StatusPayload): AppConfigDraft {
       notion_database_id: status.outputs?.notion_database_id_configured ? "configured" : "",
       notion_title_property: status.outputs?.notion_title_property ?? "Name",
       notion_api_base: status.outputs?.notion_api_base ?? "https://api.notion.com/v1",
+    },
+    prompt: {
+      active_template: status.prompt?.active_template ?? "learning",
+      custom_instruction: status.prompt?.custom_instruction ?? "",
+    },
+    note_template: {
+      active_template: status.note_template?.active_template ?? "study_note",
+      include_transcript: status.note_template?.include_transcript ?? true,
+      include_source_notes: status.note_template?.include_source_notes ?? true,
+      attribution_name: status.note_template?.attribution_name ?? "小黄狗",
     },
   };
 }
@@ -238,6 +249,16 @@ function buildDraftFromForm(): AppConfigDraft {
         : stringFromInput("cfg-output-notion-db") || base.outputs.notion_database_id,
       notion_title_property: stringFromInput("cfg-output-notion-title") || base.outputs.notion_title_property,
       notion_api_base: stringFromInput("cfg-output-notion-api") || base.outputs.notion_api_base,
+    },
+    prompt: {
+      active_template: stringFromInput("cfg-prompt-template") || base.prompt.active_template,
+      custom_instruction: stringFromInput("cfg-prompt-custom") || "",
+    },
+    note_template: {
+      active_template: stringFromInput("cfg-note-template") || base.note_template.active_template,
+      include_transcript: boolFromInput("cfg-note-include-transcript", base.note_template.include_transcript),
+      include_source_notes: boolFromInput("cfg-note-include-source-notes", base.note_template.include_source_notes),
+      attribution_name: stringFromInput("cfg-note-attribution") || base.note_template.attribution_name,
     },
   };
 }
@@ -564,17 +585,33 @@ async function handleCheckUpdates(): Promise<void> {
     if (!response.ok) {
       setMessage("当前没有可用发布版本。");
     } else {
-      const payload = (await response.json()) as { tag_name?: string; html_url?: string; name?: string };
+      const payload = (await response.json()) as {
+        tag_name?: string;
+        html_url?: string;
+        name?: string;
+        assets?: Array<{ name?: string; browser_download_url?: string }>;
+      };
       const latest = (payload.tag_name || payload.name || "").replace(/^v/i, "");
       const current = state.appVersion;
+      const asset = payload.assets?.find((item) => item.name?.endsWith(".exe"));
+      state.latestRelease = latest
+        ? {
+            tag: payload.tag_name || payload.name || latest,
+            version: latest,
+            url: payload.html_url || "",
+            assetName: asset?.name || "",
+            assetUrl: asset?.browser_download_url || payload.html_url || "",
+            isNewer: current ? compareVersions(current, latest) < 0 : false,
+          }
+        : null;
       if (!latest) {
         setMessage("未能识别最新版本号。");
       } else if (!current) {
-        setMessage(`最新版本：${latest}\n${payload.html_url || ""}`);
+        setMessage(`最新版本：${latest}`);
       } else if (compareVersions(current, latest) >= 0) {
         setMessage(`已是最新版本（当前 ${current}，最新 ${latest}）。`);
       } else {
-        setMessage(`有新版本可更新：当前 ${current} → 最新 ${latest}\n${payload.html_url || ""}`);
+        setMessage(`有新版本可更新：当前 ${current} → 最新 ${latest}`);
       }
     }
   } catch (error) {
@@ -583,6 +620,16 @@ async function handleCheckUpdates(): Promise<void> {
     setBusy(false);
     render();
   }
+}
+
+async function handleOpenLatestRelease(): Promise<void> {
+  const url = state.latestRelease?.assetUrl || state.latestRelease?.url;
+  if (!url) {
+    setError("请先检查更新。");
+    render();
+    return;
+  }
+  await runAction("打开下载页", () => openUrl(url));
 }
 
 function compareVersions(a: string, b: string): number {
@@ -613,6 +660,7 @@ function renderNav(): string {
     ["accounts", "账号", "User"],
     ["sources", "导入", "Inbox"],
     ["queue", "队列", "List"],
+    ["templates", "模板", "FileText"],
     ["knowledge", "知识库", "Library"],
   ];
   const utilities: Array<[typeof state.activeView, string, string]> = [
@@ -649,6 +697,7 @@ function iconSvg(name: string): string {
     Inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"></path><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6l3.5-7Z"></path>',
     List: '<path d="M8 6h13"></path><path d="M8 12h13"></path><path d="M8 18h13"></path><path d="M3 6h.01"></path><path d="M3 12h.01"></path><path d="M3 18h.01"></path>',
     Library: '<path d="M4 19.5V5a2 2 0 0 1 2-2h12"></path><path d="M6 17h14"></path><path d="M6 22h14"></path><path d="M6 17a2 2 0 1 0 0 4"></path>',
+    FileText: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><path d="M14 2v6h6"></path><path d="M16 13H8"></path><path d="M16 17H8"></path><path d="M10 9H8"></path>',
     Gear: '<path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2 2 0 1 1-2.83 2.83l-.04-.04A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.06A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.04.04a2 2 0 1 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.06A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.04-.04a2 2 0 1 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.06A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.04-.04a2 2 0 1 1 2.83 2.83l-.04.04A1.7 1.7 0 0 0 19.4 9c.16.58.62 1 1.2 1H21a2 2 0 1 1 0 4h-.06a1.7 1.7 0 0 0-1.54 1Z"></path>',
     Wrench: '<path d="M14.7 6.3a4 4 0 0 0-5 5L3 18l3 3 6.7-6.7a4 4 0 0 0 5-5l-2.8 2.8-2-2 2.8-2.8Z"></path>',
     Route: '<circle cx="6" cy="19" r="3"></circle><circle cx="18" cy="5" r="3"></circle><path d="M9 19h1.5a3.5 3.5 0 0 0 0-7H9.5a3.5 3.5 0 0 1 0-7H15"></path>',
@@ -666,6 +715,7 @@ function renderView(): string {
   if (state.activeView === "accounts") return renderAccountsView();
   if (state.activeView === "sources") return renderSourcesView();
   if (state.activeView === "queue") return renderQueueView();
+  if (state.activeView === "templates") return renderTemplatesView();
   if (state.activeView === "rules") return renderRulesView();
   if (state.activeView === "logs") return renderLogsView();
   if (state.activeView === "knowledge") return renderKnowledgeView();
@@ -1048,10 +1098,14 @@ function renderSourcesView(): string {
   return `
     <section class="view">
       <div class="view-header">
-        <h1>导入</h1>
+        <div>
+          <span class="eyebrow">Source collector</span>
+          <h1>导入</h1>
+        </div>
         <button id="save-sources" ${disabledAttr()}>保存来源</button>
       </div>
       ${renderAccountSummary(["bilibili", "youtube", "tiktok"])}
+      ${renderSourceConnectorGrid()}
       <div class="split">
         <div class="panel">
           <h2>链接</h2>
@@ -1080,6 +1134,29 @@ function renderSourcesView(): string {
       ${renderMessageArea()}
     </section>
   `;
+}
+
+function renderSourceConnectorGrid(): string {
+  const connectors = [
+    ["视频平台", "抖音、B站、YouTube、TikTok", "账号页登录后，在运行或列表导入里处理。"],
+    ["网页文章", "普通网页、知乎文章、公众号网页", "粘贴到“网页 URL”，或批量放入 links.txt。"],
+    ["播客/RSS", "播客、博客、新闻源", "把 RSS / Atom 地址放入 RSS 文本框。"],
+    ["本地资料", "PDF、字幕、音频、视频、文本", "把文件放入 inbox，或填写目录路径扫描。"],
+    ["图片/OCR", "截图、扫描件、图片文字", "放入目录扫描；后续可接 OCR 引擎。"],
+    ["Notion/HTML/CSV", "多输出沉淀", "在配置页开启对应输出方式。"],
+  ];
+  return `<div class="connector-grid compact">
+    ${connectors
+      .map(
+        ([title, scope, action]) => `
+          <div class="connector-card">
+            <div class="connector-head"><b>${escapeHtml(title)}</b><span>${escapeHtml(scope)}</span></div>
+            <p>${escapeHtml(action)}</p>
+          </div>
+        `,
+      )
+      .join("")}
+  </div>`;
 }
 
 function renderQueueView(): string {
@@ -1121,17 +1198,118 @@ function renderQueueView(): string {
 }
 
 function renderQueueRow(item: { id: number; status: string; title: string | null; url: string; platform: string; error: string | null; note_path: string | null }): string {
+  const advice = queueAdvice(item);
   return `<tr>
     <td>${item.id}</td>
     <td><span class="badge ${escapeAttr(item.status)}">${escapeHtml(item.status)}</span></td>
     <td>${escapeHtml(item.title ?? item.url)}</td>
     <td>${escapeHtml(item.platform)}</td>
-    <td>${escapeHtml(item.error ?? item.note_path ?? "")}</td>
+    <td>
+      <div class="queue-detail">
+        <b>${escapeHtml(item.error ? "需要处理" : item.note_path ? "已输出" : "等待处理")}</b>
+        <span>${escapeHtml(item.error ?? item.note_path ?? item.url)}</span>
+        ${advice ? `<small>${escapeHtml(advice)}</small>` : ""}
+      </div>
+    </td>
     <td class="row-actions">
       <button data-retry-id="${item.id}" ${disabledAttr()}>重试</button>
       <button data-skip-id="${item.id}" ${disabledAttr()}>跳过</button>
     </td>
   </tr>`;
+}
+
+function queueAdvice(item: { status: string; error: string | null; platform: string }): string {
+  const error = (item.error ?? "").toLowerCase();
+  if (!item.error) return item.status === "done" ? "笔记已生成，可在输出目录查看。" : "";
+  if (error.includes("api") || error.includes("key")) return "检查 LLM API Key、Base URL 和模型名称。";
+  if (error.includes("cookie") || error.includes("login") || error.includes("account")) return "账号登录态可能失效，请到账号页校验或重新登录。";
+  if (error.includes("yt-dlp") || error.includes("ffmpeg") || error.includes("whisper")) return "依赖缺失或路径错误，请到依赖页重新检测并安装。";
+  if (error.includes("notion")) return "Notion 输出失败，请检查 Token、Database ID 和标题字段。";
+  return "可先重试；重复失败时打开日志页查看详细信息。";
+}
+
+function renderTemplatesView(): string {
+  const draft = state.configDraft;
+  if (!draft) return renderLoadingView("模板");
+  return `
+    <section class="view">
+      <div class="view-header">
+        <div>
+          <span class="eyebrow">Prompt & note templates</span>
+          <h1>模板</h1>
+        </div>
+        <button id="save-config" ${disabledAttr()}>保存模板</button>
+      </div>
+      <div class="split">
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">LLM</span>
+              <h2>提示词模板</h2>
+            </div>
+          </div>
+          ${selectField("摘要用途", "cfg-prompt-template", promptTemplateOptions(), draft.prompt.active_template)}
+          <label class="field wide">
+            <span>补充规则</span>
+            <textarea id="cfg-prompt-custom" rows="9">${escapeHtml(draft.prompt.custom_instruction)}</textarea>
+          </label>
+          <div class="template-preview">
+            ${promptTemplateCards(draft.prompt.active_template)}
+          </div>
+        </section>
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Markdown</span>
+              <h2>输出模板</h2>
+            </div>
+          </div>
+          ${selectField("笔记结构", "cfg-note-template", noteTemplateOptions(), draft.note_template.active_template)}
+          ${checkbox("写入原始转写", "cfg-note-include-transcript", draft.note_template.include_transcript)}
+          ${checkbox("写入处理备注", "cfg-note-include-source-notes", draft.note_template.include_source_notes)}
+          ${field("署名", "cfg-note-attribution", draft.note_template.attribution_name)}
+          <div class="template-preview">
+            <b>当前笔记结构</b>
+            <span>frontmatter、摘要、知识点、行动清单、可选处理备注、可选原文、自动署名。</span>
+          </div>
+        </section>
+      </div>
+      ${hiddenTemplateConfig(draft)}
+      ${renderMessageArea()}
+    </section>
+  `;
+}
+
+function promptTemplateOptions(): Array<[string, string]> {
+  return [
+    ["learning", "通用学习总结"],
+    ["exam", "考研/考试资料"],
+    ["quant", "炒股/量化学习"],
+    ["podcast", "播客/访谈"],
+    ["web", "网页文章"],
+    ["paper", "论文/研究"],
+  ];
+}
+
+function noteTemplateOptions(): Array<[string, string]> {
+  return [
+    ["study_note", "学习笔记"],
+    ["review_card", "复习卡片"],
+    ["research_note", "研究笔记"],
+    ["action_note", "行动清单"],
+  ];
+}
+
+function promptTemplateCards(active: string): string {
+  const descriptions: Record<string, string> = {
+    learning: "适合课程、教程、短视频知识点，强调概念、例子和复习动作。",
+    exam: "适合考研和考试资料，强调考点、易错点、背诵线索和复习优先级。",
+    quant: "适合炒股与量化学习，强调策略逻辑、风险、参数和验证方法。",
+    podcast: "适合长音频，强调观点、时间线、金句和后续行动。",
+    web: "适合网页文章，强调主旨、证据、可引用内容和个人解读。",
+    paper: "适合论文，强调问题、方法、数据、结论、局限和复现。",
+  };
+  return `<b>${escapeHtml(promptTemplateOptions().find(([value]) => value === active)?.[1] ?? "通用学习总结")}</b><span>${escapeHtml(descriptions[active] ?? descriptions.learning)}</span>`;
 }
 
 function renderRulesView(): string {
@@ -1140,8 +1318,14 @@ function renderRulesView(): string {
   return `
     <section class="view">
       <div class="view-header">
-        <h1>规则</h1>
+        <div>
+          <span class="eyebrow">Routing rules</span>
+          <h1>规则</h1>
+        </div>
         <button id="save-config" ${disabledAttr()}>保存</button>
+      </div>
+      <div class="rule-grid">
+        ${draft.allowed_folders.map((folder) => renderRuleCard(folder)).join("")}
       </div>
       <div class="form-grid">
         ${checkbox("启用自动分类", "cfg-routing-enabled", draft.routing_enabled)}
@@ -1157,11 +1341,136 @@ function renderRulesView(): string {
   `;
 }
 
+function renderRuleCard(folder: string): string {
+  const hints: Record<string, string> = {
+    "AI学习": "大模型、提示词、智能体、AI 工具",
+    "考研资料汇总": "考研、复试、调剂、备考材料",
+    "炒股与量化学习": "股票、量化、交易、回测、风控",
+    "研后/英语学习": "英语、单词、听力、长难句",
+    "工作": "项目、简历、面试、职场、会议",
+    "Life": "健康、生活、运动、睡眠",
+    "Inbox/Learning Inbox": "不确定内容的默认入口",
+  };
+  return `<div class="rule-card"><b>${escapeHtml(folder)}</b><span>${escapeHtml(hints[folder] ?? "自定义分类目录")}</span></div>`;
+}
+
 function renderLogsView(): string {
+  const issues = diagnosticIssues();
   const rows = state.logs
     .map((log) => `<div class="log-row"><b>${escapeHtml(log.name)}</b><span>${escapeHtml(log.path)}</span></div>`)
     .join("");
-  return `<section class="view"><h1>日志</h1>${rows || '<p class="muted">暂无日志文件。</p>'}</section>`;
+  return `
+    <section class="view">
+      <div class="view-header">
+        <div>
+          <span class="eyebrow">Diagnostics</span>
+          <h1>诊断</h1>
+        </div>
+        <div class="toolbar">
+          <button id="doctor-json" ${disabledAttr()}>重新检查</button>
+          <button data-open-output="project" ${disabledAttr()}>打开项目目录</button>
+        </div>
+      </div>
+      <div class="diagnostic-grid">
+        ${
+          issues.length
+            ? issues.map(renderDiagnosticIssue).join("")
+            : '<div class="diagnostic-card ok"><b>当前没有发现需要处理的问题</b><span>如果任务失败，先刷新一次，再查看下方日志文件。</span></div>'
+        }
+      </div>
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Technical logs</span>
+            <h2>技术日志</h2>
+          </div>
+        </div>
+        ${rows || '<p class="muted">暂无日志文件。</p>'}
+      </section>
+      ${renderMessageArea()}
+    </section>
+  `;
+}
+
+function diagnosticIssues(): Array<{ severity: "bad" | "warn"; title: string; impact: string; action: string }> {
+  const issues: Array<{ severity: "bad" | "warn"; title: string; impact: string; action: string }> = [];
+  for (const check of state.doctor?.checks ?? []) {
+    if (check.ok) continue;
+    issues.push({
+      severity: check.required ? "bad" : "warn",
+      title: readableCheckName(check.name),
+      impact: check.required ? "会阻止核心流程继续运行。" : "只影响部分来源或可选能力。",
+      action: readableCheckAction(check.name, check.detail),
+    });
+  }
+  for (const item of state.dependencies?.items ?? []) {
+    if (item.status === "ready") continue;
+    const label = item.label.toLowerCase();
+    if (issues.some((issue) => issue.title.toLowerCase().includes(label) || label.includes(issue.title.toLowerCase()))) {
+      continue;
+    }
+    issues.push({
+      severity: "warn",
+      title: `${item.label} 不可用`,
+      impact: item.purpose,
+      action: item.installable ? "可在依赖页点击安装缺失工具。" : item.manual_action,
+    });
+  }
+  const failedCount = state.status?.queue.failed ?? 0;
+  if (failedCount > 0) {
+    issues.push({
+      severity: "warn",
+      title: `${failedCount} 个任务失败`,
+      impact: "这些资料还没有生成最终笔记。",
+      action: "到队列页筛选失败项，先重试；重复失败再看错误建议。",
+    });
+  }
+  return dedupeDiagnostics(issues);
+}
+
+function renderDiagnosticIssue(issue: { severity: "bad" | "warn"; title: string; impact: string; action: string }): string {
+  return `<div class="diagnostic-card ${issue.severity}">
+    <b>${escapeHtml(issue.title)}</b>
+    <span>${escapeHtml(issue.impact)}</span>
+    <small>${escapeHtml(issue.action)}</small>
+  </div>`;
+}
+
+function readableCheckName(name: string): string {
+  const names: Record<string, string> = {
+    config: "配置文件",
+    queue_db_parent: "队列数据库目录",
+    cache_dir: "缓存目录",
+    obsidian_mode: "输出模式",
+    obsidian_vault: "Markdown/Obsidian 输出目录",
+    "yt-dlp": "yt-dlp",
+    ffmpeg: "ffmpeg",
+    "douyin-downloader": "抖音下载器",
+    whisper: "Whisper 转写",
+    funasr: "FunASR 转写",
+    llm_api_key: "LLM API Key",
+    obsidian_rest_key: "Obsidian REST Key",
+    output_formats: "输出格式",
+    notion_credentials: "Notion 配置",
+  };
+  return names[name] ?? name;
+}
+
+function readableCheckAction(name: string, detail: string): string {
+  if (name === "llm_api_key") return "到配置页填写 DeepSeek API Key，或关闭 LLM。";
+  if (name === "obsidian_vault") return "到配置页选择真实存在的输出目录。";
+  if (name === "notion_credentials") return "如果开启 Notion 输出，请填写 Token 和 Database ID。";
+  if (["yt-dlp", "ffmpeg", "whisper", "funasr", "douyin-downloader"].includes(name)) return "到依赖页重新检测，并按提示安装或填写路径。";
+  return detail || "按配置页提示修正后重新检查。";
+}
+
+function dedupeDiagnostics<T extends { title: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.title)) return false;
+    seen.add(item.title);
+    return true;
+  });
 }
 
 function renderKnowledgeView(): string {
@@ -1180,15 +1489,36 @@ function renderKnowledgeView(): string {
 }
 
 function renderUpdatesView(): string {
+  const release = state.latestRelease;
   return `
     <section class="view">
       <div class="view-header">
-        <h1>更新</h1>
-        <button id="check-updates" ${disabledAttr()}>检查更新</button>
+        <div>
+          <span class="eyebrow">Release</span>
+          <h1>更新</h1>
+        </div>
+        <div class="toolbar">
+          <button id="check-updates" ${disabledAttr()}>检查更新</button>
+          <button id="open-latest-release" ${disabledAttr()} ${release ? "" : "disabled"}>打开下载</button>
+        </div>
+      </div>
+      <div class="update-grid">
+        <div class="update-card">
+          <span>当前版本</span>
+          <b>${escapeHtml(state.appVersion || "未知")}</b>
+        </div>
+        <div class="update-card ${release?.isNewer ? "warn" : "ok"}">
+          <span>最新版本</span>
+          <b>${escapeHtml(release?.version || "未检查")}</b>
+        </div>
+        <div class="update-card">
+          <span>安装包</span>
+          <b>${escapeHtml(release?.assetName || "检查后显示")}</b>
+        </div>
       </div>
       <div class="settings">
         <p><b>仓库：</b>Jaychouhyl/Auto-Obsidian-md</p>
-        <p><b>当前版本：</b>${escapeHtml(state.appVersion || "未知")}</p>
+        <p><b>升级方式：</b>检查到新版后，打开下载页下载安装包覆盖安装。</p>
       </div>
       ${renderMessageArea()}
     </section>
@@ -1204,7 +1534,6 @@ function renderSettingsView(): string {
         <h1>高级</h1>
         <div class="toolbar">
           <button id="save-config" ${disabledAttr()}>保存</button>
-          <button id="write-launcher" ${disabledAttr()}>生成启动器</button>
           <button id="doctor" ${disabledAttr()}>doctor</button>
         </div>
       </div>
@@ -1219,6 +1548,40 @@ function renderSettingsView(): string {
         ${field("whisper", "cfg-whisper", draft.tools.whisper)}
         ${field("funasr", "cfg-funasr", draft.tools.funasr)}
       </div>
+      <div class="split">
+        <section class="panel">
+          <span class="eyebrow">Local LLM</span>
+          <h2>本地模型</h2>
+          <div class="connector-grid compact">
+            <div class="connector-card"><div class="connector-head"><b>Ollama</b><span>本地</span></div><p>Base URL 可填 http://127.0.0.1:11434/v1，模型填本机模型名。</p></div>
+            <div class="connector-card"><div class="connector-head"><b>LM Studio</b><span>本地</span></div><p>启动本地 OpenAI-compatible server 后，把 Base URL 和模型名填到配置页。</p></div>
+          </div>
+        </section>
+        <section class="panel">
+          <span class="eyebrow">Privacy</span>
+          <h2>隐私与备份</h2>
+          <div class="privacy-list">
+            <span>API Key 不在界面回显；留空保存会保留原值。</span>
+            <span>账号登录态只保存在本机 accounts 目录。</span>
+            <span>备份包可能包含配置和登录态，不要公开分享。</span>
+          </div>
+        </section>
+      </div>
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Install experience</span>
+            <h2>软件级安装体验</h2>
+          </div>
+          <button id="write-launcher" ${disabledAttr()}>生成启动器</button>
+        </div>
+        <div class="installer-steps">
+          <span>桌面快捷方式：已支持</span>
+          <span>开始菜单/卸载：安装包提供</span>
+          <span>版本升级：更新页检查并打开安装包</span>
+          <span>首次使用：配置页完成输出目录、LLM、依赖、账号</span>
+        </div>
+      </section>
       ${hiddenCoreConfig(draft)}
       ${renderMessageArea()}
     </section>
@@ -1280,6 +1643,12 @@ function hiddenOutputConfig(draft: AppConfigDraft): string {
     ${hidden("cfg-output-notion-db", draft.outputs.notion_database_id)}
     ${hidden("cfg-output-notion-title", draft.outputs.notion_title_property)}
     ${hidden("cfg-output-notion-api", draft.outputs.notion_api_base)}
+  `;
+}
+
+function hiddenTemplateConfig(draft: AppConfigDraft): string {
+  return `
+    ${hiddenAdvancedConfig(draft)}
   `;
 }
 
@@ -1371,6 +1740,7 @@ function bindEvents(): void {
   document.querySelector<HTMLButtonElement>("#knowledge-maintenance")?.addEventListener("click", () => runAction("生成知识库报告", knowledgeMaintenance));
   document.querySelector<HTMLButtonElement>("#write-launcher")?.addEventListener("click", () => runAction("生成启动器", writeLauncher));
   document.querySelector<HTMLButtonElement>("#check-updates")?.addEventListener("click", () => void handleCheckUpdates());
+  document.querySelector<HTMLButtonElement>("#open-latest-release")?.addEventListener("click", () => void handleOpenLatestRelease());
   document.querySelector<HTMLButtonElement>("#dismiss-banner")?.addEventListener("click", () => {
     state.bannerDismissed = true;
     render();

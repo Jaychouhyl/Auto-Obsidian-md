@@ -140,6 +140,57 @@ class MarkdownRenderingTest(unittest.TestCase):
         self.assertIn("自动化写的", rendered)
         self.assertIn("署名：小黄狗", rendered)
 
+    def test_note_template_changes_section_labels(self):
+        item = QueueItem(
+            id=7,
+            url="https://example.com/review",
+            title="复习资料",
+            platform="web",
+            content_type="article",
+            status="pending",
+            created_at="2026-06-03T10:00:00",
+            updated_at="2026-06-03T10:00:00",
+            metadata={},
+            note_path=None,
+            error=None,
+        )
+
+        rendered = render_markdown_note(item, NotePayload(summary="x", active_template="review_card"))
+
+        self.assertIn("## 记忆线索", rendered)
+        self.assertIn("## 需要掌握", rendered)
+        self.assertIn("## 复习任务", rendered)
+
+    def test_note_template_can_hide_transcript_and_source_notes(self):
+        item = QueueItem(
+            id=8,
+            url="https://example.com/private",
+            title="精简笔记",
+            platform="web",
+            content_type="article",
+            status="pending",
+            created_at="2026-06-03T10:00:00",
+            updated_at="2026-06-03T10:00:00",
+            metadata={},
+            note_path=None,
+            error=None,
+        )
+
+        rendered = render_markdown_note(
+            item,
+            NotePayload(
+                summary="x",
+                source_notes=["内部处理备注"],
+                transcript="原文",
+                include_transcript=False,
+                include_source_notes=False,
+                attribution_name="小黄狗",
+            ),
+        )
+
+        self.assertNotIn("## 原始转写", rendered)
+        self.assertNotIn("内部处理备注", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

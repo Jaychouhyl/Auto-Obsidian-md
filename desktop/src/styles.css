@@ -285,6 +285,10 @@ p {
 .panel,
 .log-row,
 .settings,
+.template-preview,
+.rule-card,
+.diagnostic-card,
+.update-card,
 .message,
 .error,
 .doctor-row,
@@ -378,11 +382,21 @@ p {
 }
 
 .dependency-grid,
-.connector-grid {
+.connector-grid,
+.rule-grid,
+.diagnostic-grid,
+.update-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
+}
+
+.connector-grid.compact,
+.rule-grid,
+.diagnostic-grid,
+.update-grid {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 }
 
 .dependency-item,
@@ -475,6 +489,53 @@ p {
 .connector-card p,
 .hint-panel p {
   margin: 0;
+}
+
+.template-preview,
+.rule-card,
+.diagnostic-card,
+.update-card {
+  display: grid;
+  gap: 7px;
+}
+
+.template-preview span,
+.rule-card span,
+.diagnostic-card span,
+.diagnostic-card small,
+.update-card span,
+.privacy-list span,
+.installer-steps span,
+.queue-detail span,
+.queue-detail small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.diagnostic-card.bad {
+  border-color: rgba(239, 68, 68, 0.62);
+}
+
+.diagnostic-card.warn,
+.update-card.warn {
+  border-color: rgba(245, 196, 81, 0.62);
+}
+
+.diagnostic-card.ok,
+.update-card.ok,
+.rule-card {
+  border-color: rgba(34, 197, 94, 0.38);
+}
+
+.update-card b {
+  overflow-wrap: anywhere;
+}
+
+.privacy-list,
+.installer-steps,
+.queue-detail {
+  display: grid;
+  gap: 6px;
 }
 
 .dependency-item small {
@@ -953,6 +1014,9 @@ th {
   .dependency-summary,
   .dependency-grid,
   .connector-grid,
+  .rule-grid,
+  .diagnostic-grid,
+  .update-grid,
   .setup-wizard,
   .output-toggles,
   .form-grid,

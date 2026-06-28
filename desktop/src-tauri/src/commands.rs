@@ -105,6 +105,20 @@ pub struct OutputsConfigDraft {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct PromptConfigDraft {
+    active_template: String,
+    custom_instruction: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NoteTemplateConfigDraft {
+    active_template: String,
+    include_transcript: bool,
+    include_source_notes: bool,
+    attribution_name: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct AppConfigDraft {
     queue_db: String,
     cache_dir: String,
@@ -124,6 +138,8 @@ pub struct AppConfigDraft {
     allowed_folders: Vec<String>,
     tools: ToolConfigDraft,
     outputs: OutputsConfigDraft,
+    prompt: PromptConfigDraft,
+    note_template: NoteTemplateConfigDraft,
 }
 
 #[derive(Debug, Serialize)]
@@ -209,7 +225,7 @@ fn render_config(draft: &AppConfigDraft) -> String {
         .join(", ");
 
     format!(
-        "[paths]\nqueue_db = {}\ncache_dir = {}\n\n[obsidian]\nmode = {}\nvault_path = {}\nfolder = {}\nrest_base_url = {}\nrest_api_key = {}\n\n[tools]\nyt_dlp = {}\nffmpeg = {}\ndouyin_downloader = {}\ndouyin_config = {}\nwhisper = {}\nfunasr = {}\n\n[llm]\nenabled = {}\nprovider = {}\nbase_url = {}\napi_key = {}\nmodel = {}\nlanguage = {}\n\n[outputs]\nformats = [{}]\nhtml_dir = {}\ncsv_path = {}\nnotion_token = {}\nnotion_database_id = {}\nnotion_title_property = {}\nnotion_api_base = {}\n\n[routing]\nenabled = {}\nfallback_folder = {}\nallowed_folders = [\n{}\n]\n",
+        "[paths]\nqueue_db = {}\ncache_dir = {}\n\n[obsidian]\nmode = {}\nvault_path = {}\nfolder = {}\nrest_base_url = {}\nrest_api_key = {}\n\n[tools]\nyt_dlp = {}\nffmpeg = {}\ndouyin_downloader = {}\ndouyin_config = {}\nwhisper = {}\nfunasr = {}\n\n[llm]\nenabled = {}\nprovider = {}\nbase_url = {}\napi_key = {}\nmodel = {}\nlanguage = {}\n\n[outputs]\nformats = [{}]\nhtml_dir = {}\ncsv_path = {}\nnotion_token = {}\nnotion_database_id = {}\nnotion_title_property = {}\nnotion_api_base = {}\n\n[prompt]\nactive_template = {}\ncustom_instruction = {}\n\n[note_template]\nactive_template = {}\ninclude_transcript = {}\ninclude_source_notes = {}\nattribution_name = {}\n\n[routing]\nenabled = {}\nfallback_folder = {}\nallowed_folders = [\n{}\n]\n",
         toml_string(&draft.queue_db),
         toml_string(&draft.cache_dir),
         toml_string(&draft.obsidian_mode),
@@ -236,6 +252,12 @@ fn render_config(draft: &AppConfigDraft) -> String {
         toml_string(&draft.outputs.notion_database_id),
         toml_string(&draft.outputs.notion_title_property),
         toml_string(&draft.outputs.notion_api_base),
+        toml_string(&draft.prompt.active_template),
+        toml_string(&draft.prompt.custom_instruction),
+        toml_string(&draft.note_template.active_template),
+        toml_bool(draft.note_template.include_transcript),
+        toml_bool(draft.note_template.include_source_notes),
+        toml_string(&draft.note_template.attribution_name),
         toml_bool(draft.routing_enabled),
         toml_string(&draft.fallback_folder),
         folder_lines,
@@ -367,6 +389,47 @@ pub fn open_path(path: String) -> Result<CommandResult, String> {
         ok: true,
         code: 0,
         stdout: format!("Opened: {}", path),
+        stderr: String::new(),
+    })
+}
+
+#[tauri::command]
+pub fn open_url(url: String) -> Result<CommandResult, String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("Only http/https URLs are supported.".to_string());
+    }
+
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        Command::new("rundll32.exe")
+            .arg("url.dll,FileProtocolHandler")
+            .arg(&url)
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&url)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(CommandResult {
+        ok: true,
+        code: 0,
+        stdout: format!("Opened: {}", url),
         stderr: String::new(),
     })
 }
