@@ -21,6 +21,13 @@ SUPPORTED_INBOX_EXTENSIONS = {
     ".mov",
     ".flac",
     ".ogg",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".bmp",
+    ".tif",
+    ".tiff",
 }
 
 

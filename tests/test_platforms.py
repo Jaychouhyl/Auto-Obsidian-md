@@ -12,7 +12,9 @@ class PlatformDetectionTest(unittest.TestCase):
             "https://youtu.be/dQw4w9WgXcQ": ("youtube", "video"),
             "https://www.bilibili.com/video/BV15qQwB4EZ9/": ("bilibili", "video"),
             "https://example.com/article": ("web", "article"),
+            "https://example.com/screenshot.png": ("web", "image"),
             "D:/learning/example.pdf": ("local_file", "document"),
+            "D:/learning/slide.webp": ("local_file", "image"),
             "D:/learning/podcast.mp3": ("local_file", "audio"),
         }
 

@@ -45,14 +45,15 @@ def dependency_report(
 
     for definition in _tool_definitions(config):
         resolved = resolver(definition.configured)
-        status = "ready" if resolved else "missing"
+        builtin_ocr = definition.id == "ocr" and definition.configured.strip().lower() in {"", "builtin"}
+        status = "ready" if resolved or builtin_ocr else "missing"
         items.append(
             {
                 "id": definition.id,
                 "label": definition.label,
                 "status": status,
                 "configured": definition.configured,
-                "resolved_path": resolved or "",
+                "resolved_path": resolved or ("内置 OCR 入口" if builtin_ocr else ""),
                 "installable": definition.installable and _is_windows(),
                 "config_key": definition.config_key,
                 "purpose": definition.purpose,
@@ -287,6 +288,17 @@ def _tool_definitions(config: AppConfig) -> list[ToolDefinition]:
             url="",
             target=tools_dir / "funasr" / "funasr.exe",
             manual_action="FunASR 为可选转写引擎，按需要手动安装后填写路径。",
+        ),
+        ToolDefinition(
+            id="ocr",
+            label="OCR 命令",
+            config_key="ocr",
+            configured=config.tools.ocr,
+            purpose="图片文字识别；留空时图片会作为待识别素材入库",
+            installable=False,
+            url="",
+            target=tools_dir / "ocr" / "ocr.exe",
+            manual_action="默认 builtin 会自动尝试本机 OCR 引擎；也可填写任意能把图片路径转成 stdout 文本的 OCR 命令。",
         ),
     ]
 

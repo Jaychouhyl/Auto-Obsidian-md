@@ -1,8 +1,10 @@
 import "./styles.css";
 import { getVersion } from "@tauri-apps/api/app";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   backupProject,
   cancelAccountLogin,
+  chooseDirectory,
   clipWebpage,
   collectPlatformList,
   collectRss,
@@ -43,7 +45,10 @@ import type {
   AccountProfile,
   AppConfigDraft,
   CommandResult,
+  CustomSourcePlugin,
+  ProgressStep,
   QueueStatus,
+  SavedNoteTemplate,
   StatusPayload,
 } from "./types";
 
@@ -54,6 +59,21 @@ if (!appRoot) {
 }
 
 const app = appRoot;
+const APP_EDITION = String(import.meta.env.VITE_APP_EDITION ?? "community").toLowerCase();
+const isCommercialEdition = APP_EDITION === "commercial";
+const appBrandName = isCommercialEdition ? "Knowledge Studio" : "Ingest Studio";
+const appBrandSubtitle = isCommercialEdition ? "personal knowledge workspace" : "local knowledge pipeline";
+const STORAGE_KEYS = {
+  onboardingDone: "knowledgeStudio.onboarding.done",
+  templates: "knowledgeStudio.templates",
+  sourcePlugins: "knowledgeStudio.sourcePlugins",
+};
+const sourcePrefill = {
+  webpage: "",
+  directory: "",
+};
+document.title = appBrandName;
+void getCurrentWindow().setTitle(appBrandName);
 
 async function refresh(): Promise<void> {
   try {
@@ -80,6 +100,7 @@ async function loadDoctorSilently(): Promise<void> {
 }
 
 async function init(): Promise<void> {
+  loadLocalState();
   try {
     state.appVersion = await getVersion();
   } catch {
@@ -88,6 +109,53 @@ async function init(): Promise<void> {
   await refresh();
   await loadDoctorSilently();
   render();
+}
+
+function loadLocalState(): void {
+  state.savedTemplates = readJson<SavedNoteTemplate[]>(STORAGE_KEYS.templates, []);
+  state.customSourcePlugins = readJson<CustomSourcePlugin[]>(
+    STORAGE_KEYS.sourcePlugins,
+    defaultSourcePlugins(),
+  );
+}
+
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(key: string, value: unknown): void {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function defaultSourcePlugins(): CustomSourcePlugin[] {
+  return [
+    {
+      id: "web-clipper",
+      name: "网页剪藏",
+      mode: "webpage",
+      description: "公众号、知乎、小红书、少数派、Medium、普通网页正文；需要登录的网站可先到账号页保存登录态。",
+      sample: "https://example.com/article",
+    },
+    {
+      id: "rss-reader",
+      name: "RSS 批量导入",
+      mode: "rss",
+      description: "把订阅源写入 feeds.txt 后按上限导入。",
+      sample: "https://example.com/feed.xml",
+    },
+    {
+      id: "local-folder",
+      name: "本地目录",
+      mode: "directory",
+      description: "扫描文本、PDF、音视频和图片文件。",
+      sample: "D:\\资料\\inbox",
+    },
+  ];
 }
 
 function draftFromStatus(status: StatusPayload): AppConfigDraft {
@@ -116,6 +184,7 @@ function draftFromStatus(status: StatusPayload): AppConfigDraft {
       douyin_config: tools.douyin_config ?? "",
       whisper: tools.whisper ?? "whisper",
       funasr: tools.funasr ?? "funasr",
+      ocr: tools.ocr ?? "",
     },
     outputs: {
       formats: status.outputs?.formats?.length ? status.outputs.formats : ["markdown"],
@@ -135,6 +204,7 @@ function draftFromStatus(status: StatusPayload): AppConfigDraft {
       include_transcript: status.note_template?.include_transcript ?? true,
       include_source_notes: status.note_template?.include_source_notes ?? true,
       attribution_name: status.note_template?.attribution_name ?? "小黄狗",
+      custom_structure: status.note_template?.custom_structure ?? "",
     },
   };
 }
@@ -146,15 +216,73 @@ async function runAction(label: string, action: () => Promise<CommandResult>): P
   try {
     const result = await action();
     if (!result.ok) {
-      setError(result.stderr || result.stdout || `${label} 失败`);
+      setError(readableCommandError(label, result));
     } else {
-      setMessage(result.stdout || `${label} 完成`);
+      setMessage(readableCommandSuccess(label, result));
     }
     await reloadData();
   } catch (error) {
     setError(error instanceof Error ? error.message : String(error));
   } finally {
     setBusy(false);
+    render();
+  }
+}
+
+function setProgressSteps(steps: ProgressStep[]): void {
+  state.progressSteps = steps;
+}
+
+function updateProgressStep(id: string, status: ProgressStep["status"], detail?: string): void {
+  state.progressSteps = state.progressSteps.map((step) =>
+    step.id === id ? { ...step, status, detail: detail ?? step.detail } : step,
+  );
+  render();
+}
+
+function clearProgressSoon(): void {
+  window.setTimeout(() => {
+    if (!state.busy) {
+      state.progressSteps = [];
+      render();
+    }
+  }, 5000);
+}
+
+async function runSimpleProgress(
+  label: string,
+  steps: ProgressStep[],
+  action: () => Promise<CommandResult>,
+): Promise<void> {
+  setProgressSteps(steps);
+  setBusy(true);
+  setMessage(`${label} 运行中...`);
+  render();
+  try {
+    const active = steps[0];
+    if (active) updateProgressStep(active.id, "active");
+    const result = await action();
+    if (!result.ok) {
+      for (const step of state.progressSteps) {
+        if (step.status === "active") updateProgressStep(step.id, "error", "失败");
+      }
+      setError(readableCommandError(label, result));
+      return;
+    }
+    for (const step of state.progressSteps) {
+      updateProgressStep(step.id, "done");
+    }
+    setMessage(readableCommandSuccess(label, result));
+    await reloadData();
+  } catch (error) {
+    const active =
+      state.progressSteps.find((step) => step.status === "active") ??
+      state.progressSteps[state.progressSteps.length - 1];
+    if (active) updateProgressStep(active.id, "error", readableError(error));
+    setError(error instanceof Error ? error.message : String(error));
+  } finally {
+    setBusy(false);
+    clearProgressSoon();
     render();
   }
 }
@@ -183,6 +311,11 @@ function numberFromInput(id: string, fallback: number, min: number, max: number)
 
 function stringFromInput(id: string): string {
   return document.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`#${id}`)?.value.trim() ?? "";
+}
+
+function optionalStringFromInput(id: string): string | null {
+  const element = document.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`#${id}`);
+  return element ? element.value.trim() : null;
 }
 
 function boolFromInput(id: string, fallback: boolean): boolean {
@@ -238,6 +371,7 @@ function buildDraftFromForm(): AppConfigDraft {
       douyin_config: stringFromInput("cfg-douyin-config") || base.tools.douyin_config,
       whisper: stringFromInput("cfg-whisper") || base.tools.whisper,
       funasr: stringFromInput("cfg-funasr") || base.tools.funasr,
+      ocr: stringFromInput("cfg-ocr"),
     },
     outputs: {
       formats: outputFormatsFromForm(base),
@@ -259,6 +393,7 @@ function buildDraftFromForm(): AppConfigDraft {
       include_transcript: boolFromInput("cfg-note-include-transcript", base.note_template.include_transcript),
       include_source_notes: boolFromInput("cfg-note-include-source-notes", base.note_template.include_source_notes),
       attribution_name: stringFromInput("cfg-note-attribution") || base.note_template.attribution_name,
+      custom_structure: optionalStringFromInput("cfg-note-custom-structure") ?? base.note_template.custom_structure,
     },
   };
 }
@@ -271,6 +406,18 @@ async function handleSaveConfig(): Promise<void> {
 
 async function handleOpenOutput(kind: string): Promise<void> {
   await runAction("打开位置", () => openOutput(kind));
+}
+
+async function handleChooseDirectory(targetId: string): Promise<void> {
+  try {
+    const selected = await chooseDirectory(stringFromInput(targetId));
+    if (!selected) return;
+    const element = document.querySelector<HTMLInputElement>(`#${targetId}`);
+    if (element) element.value = selected;
+  } catch (error) {
+    setError(error instanceof Error ? error.message : String(error));
+    render();
+  }
 }
 
 async function handleBackupProject(): Promise<void> {
@@ -356,31 +503,50 @@ async function handleInstallDependencies(): Promise<void> {
 async function handleDouyin(): Promise<void> {
   const count = numberFromInput("douyin-count", 5, 1, 100);
   if (count === null) return;
+  setProgressSteps([
+    { id: "account", label: "检查账号", detail: "使用当前抖音登录态", status: "active" },
+    { id: "collect", label: "抓取收藏", detail: `目标 ${count} 条`, status: "pending" },
+    { id: "queue", label: "写入队列", detail: "自动去重", status: "pending" },
+    { id: "process", label: "生成笔记", detail: "下载、转写、摘要、写出", status: "pending" },
+    { id: "refresh", label: "刷新结果", detail: "更新队列和日志", status: "pending" },
+  ]);
   setBusy(true);
   setMessage(`正在抓取抖音收藏，目标 ${count} 条...`);
   render();
   try {
+    updateProgressStep("account", "done", "账号检查已通过");
+    updateProgressStep("collect", "active");
     const collect = await collectDouyin(count);
     if (!collect.ok) {
+      updateProgressStep("collect", "error", "抓取失败");
       setError(collect.stderr || collect.stdout || "抖音收藏抓取失败");
       return;
     }
     const stats = extractDouyinCollectStats(collect.stdout);
     const queued = stats.queued;
+    updateProgressStep("collect", "done", `下载器返回 ${stats.returned ?? "若干"} 条`);
+    updateProgressStep("queue", "done", `去重入队 ${queued ?? "若干"} 条`);
+    updateProgressStep("process", "active");
     setMessage(`抖音请求 ${stats.requested ?? count} 条，下载器返回 ${stats.returned ?? "若干"} 条，去重入队 ${queued ?? "若干"} 条，轮数 ${stats.attempts ?? "未知"}。正在生成笔记...`);
     render();
     const process = await processQueue(queued && queued > 0 ? queued : count);
     if (!process.ok) {
-      setError(process.stderr || process.stdout || "抖音收藏处理失败");
+      updateProgressStep("process", "error", "处理失败");
+      setError(readableCommandError("抖音收藏处理", process));
     } else {
+      updateProgressStep("process", "done", "笔记已生成");
+      updateProgressStep("refresh", "active");
       const collectedText = queued === null ? "" : `请求 ${stats.requested ?? count} 条，返回 ${stats.returned ?? "未知"} 条，入队 ${queued} 条，轮数 ${stats.attempts ?? "未知"}；`;
-      setMessage(`${collectedText}处理完成。\n${process.stdout || collect.stdout}`);
+      setMessage(`${collectedText}处理完成。生成结果可到队列页和输出目录查看。`);
     }
     await reloadData();
+    updateProgressStep("refresh", "done", "界面已刷新");
   } catch (error) {
+    updateProgressStep("process", "error", readableError(error));
     setError(error instanceof Error ? error.message : String(error));
   } finally {
     setBusy(false);
+    clearProgressSoon();
     render();
   }
 }
@@ -413,6 +579,47 @@ function extractDouyinCollectStats(stdout: string): { requested: number | null; 
 function numericField(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function readableCommandSuccess(label: string, result: CommandResult): string {
+  const payload = parseCommandJson(result.stdout);
+  if (payload) {
+    const queued = numericField(payload.queued);
+    const retried = numericField(payload.retried);
+    const totalNotes = numericField(payload.total_notes);
+    const files = Array.isArray(payload.files) ? payload.files.length : null;
+    if (queued !== null) return `${label} 完成，新增 ${queued} 个待处理任务。`;
+    if (retried !== null) return `${label} 完成，已重试 ${retried} 个失败任务。`;
+    if (totalNotes !== null) return `${label} 完成，检查了 ${totalNotes} 篇笔记。`;
+    if (files !== null) return `${label} 完成，识别到 ${files} 个文件。`;
+    if (typeof payload.launcher === "string") return `${label} 完成，启动器已生成。`;
+    if (typeof payload.backup_path === "string") return `${label} 完成，备份已创建。`;
+    return `${label} 完成。`;
+  }
+  const text = result.stdout.trim();
+  return text && text.length < 240 ? text : `${label} 完成。`;
+}
+
+function readableCommandError(label: string, result: CommandResult): string {
+  const text = result.stderr || result.stdout;
+  const payload = parseCommandJson(text);
+  if (payload) {
+    const error = payload.error;
+    if (typeof error === "string") return error;
+    if (error && typeof error === "object" && "message" in error) {
+      return String((error as { message?: unknown }).message || `${label} 失败`);
+    }
+  }
+  return text.trim() || `${label} 失败`;
+}
+
+function parseCommandJson(text: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function runAccountAction(label: string, action: () => Promise<void>): Promise<void> {
@@ -511,13 +718,27 @@ async function handleDirectoryScan(): Promise<void> {
     render();
     return;
   }
-  await runAction("扫描目录", () => scanDirectory(directory));
+  await runSimpleProgress(
+    "扫描目录",
+    [
+      { id: "scan", label: "扫描文件", detail: "文本、PDF、音视频、图片", status: "active" },
+      { id: "queue", label: "写入队列", detail: "自动去重", status: "pending" },
+    ],
+    () => scanDirectory(directory),
+  );
 }
 
 async function handleRss(): Promise<void> {
   const limit = numberFromInput("rss-limit", 10, 1, 100);
   if (limit === null) return;
-  await runAction("导入 RSS", () => collectRss(limit));
+  await runSimpleProgress(
+    "导入 RSS",
+    [
+      { id: "feeds", label: "读取订阅源", detail: `最多 ${limit} 条`, status: "active" },
+      { id: "queue", label: "写入队列", detail: "等待统一处理", status: "pending" },
+    ],
+    () => collectRss(limit),
+  );
 }
 
 async function handleWebpage(): Promise<void> {
@@ -527,7 +748,14 @@ async function handleWebpage(): Promise<void> {
     render();
     return;
   }
-  await runAction("网页剪藏", () => clipWebpage(url));
+  await runSimpleProgress(
+    "网页剪藏",
+    [
+      { id: "fetch", label: "读取网页正文", detail: "提取标题和正文", status: "active" },
+      { id: "queue", label: "写入队列", detail: "等待摘要处理", status: "pending" },
+    ],
+    () => clipWebpage(url),
+  );
 }
 
 async function handlePlatformList(): Promise<void> {
@@ -539,7 +767,14 @@ async function handlePlatformList(): Promise<void> {
     render();
     return;
   }
-  await runAction("导入平台列表", () => collectPlatformList(url, platform, limit));
+  await runSimpleProgress(
+    "导入平台列表",
+    [
+      { id: "list", label: "解析列表", detail: `${platform} / ${limit} 条`, status: "active" },
+      { id: "queue", label: "写入队列", detail: "使用当前账号 Cookie", status: "pending" },
+    ],
+    () => collectPlatformList(url, platform, limit),
+  );
 }
 
 async function handleSaveSources(): Promise<void> {
@@ -547,11 +782,18 @@ async function handleSaveSources(): Promise<void> {
 }
 
 async function handleImportLinks(): Promise<void> {
-  await runAction("导入链接", async () => {
-    const saved = await saveSourceFiles(stringFromInput("links-text"), stringFromInput("feeds-text"));
-    if (!saved.ok) return saved;
-    return importLinks();
-  });
+  await runSimpleProgress(
+    "导入链接",
+    [
+      { id: "save", label: "保存链接", detail: "写入 sources/links.txt", status: "active" },
+      { id: "queue", label: "写入队列", detail: "自动识别平台", status: "pending" },
+    ],
+    async () => {
+      const saved = await saveSourceFiles(stringFromInput("links-text"), stringFromInput("feeds-text"));
+      if (!saved.ok) return saved;
+      return importLinks();
+    },
+  );
 }
 
 async function handleRetryFailed(): Promise<void> {
@@ -573,10 +815,49 @@ async function handleSkipItem(id: number): Promise<void> {
 async function handleProcessQueue(): Promise<void> {
   const limit = numberFromInput("process-limit", 10, 1, 200);
   if (limit === null) return;
-  await runAction("处理队列", () => processQueue(limit));
+  setProgressSteps([
+    { id: "read", label: "读取队列", detail: `最多处理 ${limit} 条`, status: "active" },
+    { id: "acquire", label: "采集内容", detail: "下载视频、读取网页/PDF/本地文件", status: "pending" },
+    { id: "transcribe", label: "转写或提取正文", detail: "音视频转文字，文本直接读取", status: "pending" },
+    { id: "summarize", label: "摘要分类", detail: "LLM 生成摘要、标签和目录", status: "pending" },
+    { id: "write", label: "写出结果", detail: "Markdown/HTML/CSV/Notion 按配置输出", status: "pending" },
+  ]);
+  setBusy(true);
+  setMessage(`正在处理 ${limit} 个待处理任务...`);
+  render();
+  try {
+    updateProgressStep("read", "done");
+    updateProgressStep("acquire", "active");
+    updateProgressStep("transcribe", "active");
+    updateProgressStep("summarize", "active");
+    updateProgressStep("write", "active");
+    const result = await processQueue(limit);
+    if (!result.ok) {
+      updateProgressStep("write", "error", "处理失败");
+      setError(readableCommandError("处理队列", result));
+      return;
+    }
+    for (const id of ["acquire", "transcribe", "summarize", "write"]) {
+      updateProgressStep(id, "done");
+    }
+    setMessage(readableCommandSuccess("处理队列", result));
+    await reloadData();
+  } catch (error) {
+    updateProgressStep("write", "error", readableError(error));
+    setError(error instanceof Error ? error.message : String(error));
+  } finally {
+    setBusy(false);
+    clearProgressSoon();
+    render();
+  }
 }
 
 async function handleCheckUpdates(): Promise<void> {
+  if (isCommercialEdition) {
+    setMessage("商业版只使用当前交付的安装包版本。");
+    render();
+    return;
+  }
   setBusy(true);
   setMessage("检查更新中...");
   render();
@@ -632,6 +913,121 @@ async function handleOpenLatestRelease(): Promise<void> {
   await runAction("打开下载页", () => openUrl(url));
 }
 
+function handleSaveTemplateToLibrary(): void {
+  const name = stringFromInput("template-library-name") || "未命名模板";
+  const structure = stringFromInput("cfg-note-custom-structure") || defaultCustomStructure();
+  const now = new Date().toISOString();
+  const existingId = stringFromInput("template-library-select");
+  const id = existingId || `tpl-${Date.now().toString(36)}`;
+  const next = state.savedTemplates.filter((template) => template.id !== id);
+  const previous = state.savedTemplates.find((template) => template.id === id);
+  next.unshift({
+    id,
+    name,
+    structure,
+    createdAt: previous?.createdAt ?? now,
+    updatedAt: now,
+  });
+  state.savedTemplates = next;
+  writeJson(STORAGE_KEYS.templates, state.savedTemplates);
+  setMessage(`模板已保存：${name}`);
+  render();
+}
+
+function handleLoadTemplateFromLibrary(): void {
+  const id = stringFromInput("template-library-select");
+  const template = state.savedTemplates.find((item) => item.id === id);
+  if (!template) {
+    setError("请先选择一个已保存模板。");
+    render();
+    return;
+  }
+  const structure = document.querySelector<HTMLTextAreaElement>("#cfg-note-custom-structure");
+  const name = document.querySelector<HTMLInputElement>("#template-library-name");
+  if (structure) structure.value = template.structure;
+  if (name) name.value = template.name;
+  if (state.configDraft) {
+    state.configDraft = {
+      ...state.configDraft,
+      note_template: {
+        ...state.configDraft.note_template,
+        custom_structure: template.structure,
+      },
+    };
+  }
+  setMessage(`已加载模板：${template.name}`);
+  render();
+}
+
+function handleDeleteTemplateFromLibrary(): void {
+  const id = stringFromInput("template-library-select");
+  const template = state.savedTemplates.find((item) => item.id === id);
+  if (!template) return;
+  if (!window.confirm(`删除模板“${template.name}”？`)) return;
+  state.savedTemplates = state.savedTemplates.filter((item) => item.id !== id);
+  writeJson(STORAGE_KEYS.templates, state.savedTemplates);
+  setMessage(`已删除模板：${template.name}`);
+  render();
+}
+
+function handleImportTemplateLibrary(): void {
+  const raw = stringFromInput("template-library-json");
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as SavedNoteTemplate[];
+    if (!Array.isArray(parsed)) throw new Error("JSON 必须是数组。");
+    state.savedTemplates = parsed.filter((item) => item.id && item.name && item.structure);
+    writeJson(STORAGE_KEYS.templates, state.savedTemplates);
+    setMessage(`已导入 ${state.savedTemplates.length} 个模板。`);
+  } catch (error) {
+    setError(error instanceof Error ? error.message : String(error));
+  }
+  render();
+}
+
+function handleSaveSourcePlugin(): void {
+  const name = stringFromInput("source-plugin-name");
+  const mode = stringFromInput("source-plugin-mode") as CustomSourcePlugin["mode"];
+  const sample = stringFromInput("source-plugin-sample");
+  const description = stringFromInput("source-plugin-description");
+  if (!name || !mode) {
+    setError("请填写来源插件名称和类型。");
+    render();
+    return;
+  }
+  const id = `src-${Date.now().toString(36)}`;
+  state.customSourcePlugins = [{ id, name, mode, sample, description }, ...state.customSourcePlugins];
+  writeJson(STORAGE_KEYS.sourcePlugins, state.customSourcePlugins);
+  setMessage(`来源插件已保存：${name}`);
+  render();
+}
+
+function handleApplySourcePlugin(id: string): void {
+  const plugin = state.customSourcePlugins.find((item) => item.id === id);
+  if (!plugin) return;
+  if (plugin.mode === "links") {
+    if (plugin.sample) state.sourceFiles.links = `${state.sourceFiles.links.trim()}\n${plugin.sample}`.trim();
+  } else if (plugin.mode === "rss") {
+    if (plugin.sample) state.sourceFiles.feeds = `${state.sourceFiles.feeds.trim()}\n${plugin.sample}`.trim();
+  } else if (plugin.mode === "webpage") {
+    sourcePrefill.webpage = plugin.sample;
+  } else if (plugin.mode === "directory") {
+    sourcePrefill.directory = plugin.sample;
+  }
+  setMessage(`已应用来源插件：${plugin.name}`);
+  render();
+}
+
+function handleDeleteSourcePlugin(id: string): void {
+  const plugin = state.customSourcePlugins.find((item) => item.id === id);
+  if (!plugin) return;
+  if (!window.confirm(`删除来源插件“${plugin.name}”？`)) return;
+  state.customSourcePlugins = state.customSourcePlugins.filter((item) => item.id !== id);
+  writeJson(STORAGE_KEYS.sourcePlugins, state.customSourcePlugins);
+  setMessage(`已删除来源插件：${plugin.name}`);
+  render();
+}
+
 function compareVersions(a: string, b: string): number {
   const pa = a.split(".").map((part) => Number.parseInt(part, 10) || 0);
   const pb = b.split(".").map((part) => Number.parseInt(part, 10) || 0);
@@ -668,7 +1064,7 @@ function renderNav(): string {
     ["dependencies", "依赖", "Wrench"],
     ["rules", "规则", "Route"],
     ["logs", "日志", "Terminal"],
-    ["updates", "更新", "Upload"],
+    ...(isCommercialEdition ? [] : ([["updates", "更新", "Upload"]] as Array<[typeof state.activeView, string, string]>)),
     ["settings", "高级", "Sliders"],
   ];
   return `
@@ -719,7 +1115,7 @@ function renderView(): string {
   if (state.activeView === "rules") return renderRulesView();
   if (state.activeView === "logs") return renderLogsView();
   if (state.activeView === "knowledge") return renderKnowledgeView();
-  if (state.activeView === "updates") return renderUpdatesView();
+  if (state.activeView === "updates") return isCommercialEdition ? renderSettingsView() : renderUpdatesView();
   return renderSettingsView();
 }
 
@@ -742,10 +1138,10 @@ function renderSetupView(): string {
       ${renderSetupWizard()}
       <div class="form-grid">
         ${selectField("输出模式", "cfg-obsidian-mode", [["local", "本地 Markdown / Obsidian 文件夹"], ["rest", "Obsidian Local REST API"]], draft.obsidian_mode)}
-        ${field("输出目录", "cfg-vault", draft.obsidian_vault)}
+        ${pathField("输出目录", "cfg-vault", draft.obsidian_vault)}
         ${field("默认文件夹", "cfg-folder", draft.obsidian_folder)}
         ${field("队列数据库", "cfg-queue-db", draft.queue_db)}
-        ${field("缓存目录", "cfg-cache-dir", draft.cache_dir)}
+        ${pathField("缓存目录", "cfg-cache-dir", draft.cache_dir)}
         ${checkbox("启用 LLM", "cfg-llm-enabled", draft.llm_enabled)}
         ${field("LLM Base URL", "cfg-llm-base", draft.llm_base_url)}
         ${field("LLM Model", "cfg-llm-model", draft.llm_model)}
@@ -780,7 +1176,7 @@ function renderOutputConfig(draft: AppConfigDraft): string {
         ${checkbox("Notion", "cfg-output-notion", draft.outputs.formats.includes("notion"))}
       </div>
       <div class="form-grid">
-        ${field("HTML 输出目录", "cfg-output-html-dir", draft.outputs.html_dir)}
+        ${pathField("HTML 输出目录", "cfg-output-html-dir", draft.outputs.html_dir)}
         ${field("Excel/CSV 索引文件", "cfg-output-csv-path", draft.outputs.csv_path)}
         ${field("Notion Token", "cfg-output-notion-token", "", "password")}
         ${field("Notion Database ID", "cfg-output-notion-db", draft.outputs.notion_database_id)}
@@ -990,6 +1386,9 @@ const PlatformDefinition: Record<AccountPlatform, { label: string; short: string
   bilibili: { label: "哔哩哔哩", short: "B站列表" },
   youtube: { label: "YouTube", short: "YouTube 列表" },
   tiktok: { label: "TikTok", short: "TikTok 内容" },
+  zhihu: { label: "知乎", short: "知乎网页" },
+  xiaohongshu: { label: "小红书", short: "小红书网页" },
+  wechat: { label: "微信公众号", short: "公众号网页" },
 };
 
 function renderAccountsView(): string {
@@ -1104,8 +1503,9 @@ function renderSourcesView(): string {
         </div>
         <button id="save-sources" ${disabledAttr()}>保存来源</button>
       </div>
-      ${renderAccountSummary(["bilibili", "youtube", "tiktok"])}
+      ${renderAccountSummary(["douyin", "bilibili", "youtube", "tiktok", "zhihu", "xiaohongshu", "wechat"])}
       ${renderSourceConnectorGrid()}
+      ${renderSourcePluginManager()}
       <div class="split">
         <div class="panel">
           <h2>链接</h2>
@@ -1122,11 +1522,11 @@ function renderSourcesView(): string {
         </div>
       </div>
       <div class="form-grid">
-        ${field("网页 URL", "webpage-url", "https://example.com/article")}
+        ${field("网页 URL", "webpage-url", sourcePrefill.webpage || "https://example.com/article")}
         <button id="clip-webpage" ${disabledAttr()}>网页剪藏</button>
-        ${field("目录路径", "directory-path", "D:\\Downloads")}
+        ${pathField("目录路径", "directory-path", sourcePrefill.directory || "D:\\Downloads")}
         <button id="run-directory" ${disabledAttr()}>扫描目录</button>
-        ${selectField("平台", "platform-kind", [["auto", "自动"], ["youtube", "YouTube"], ["bilibili", "B站"], ["tiktok", "TikTok"]])}
+        ${selectField("视频列表平台", "platform-kind", [["auto", "自动"], ["youtube", "YouTube"], ["bilibili", "B站"], ["tiktok", "TikTok"]])}
         ${field("列表链接", "platform-url", "")}
         ${field("列表数量", "platform-limit", "20", "number")}
         <button id="run-platform-list" ${disabledAttr()}>导入列表</button>
@@ -1138,12 +1538,12 @@ function renderSourcesView(): string {
 
 function renderSourceConnectorGrid(): string {
   const connectors = [
-    ["视频平台", "抖音、B站、YouTube、TikTok", "账号页登录后，在运行或列表导入里处理。"],
-    ["网页文章", "普通网页、知乎文章、公众号网页", "粘贴到“网页 URL”，或批量放入 links.txt。"],
-    ["播客/RSS", "播客、博客、新闻源", "把 RSS / Atom 地址放入 RSS 文本框。"],
-    ["本地资料", "PDF、字幕、音频、视频、文本", "把文件放入 inbox，或填写目录路径扫描。"],
-    ["图片/OCR", "截图、扫描件、图片文字", "放入目录扫描；后续可接 OCR 引擎。"],
-    ["Notion/HTML/CSV", "多输出沉淀", "在配置页开启对应输出方式。"],
+    ["账号来源", "抖音、B站、YouTube、TikTok、知乎、小红书、公众号", "账号页统一登录、切换、校验。抖音收藏在运行页选择数量后抓取。"],
+    ["视频列表", "B站收藏夹、YouTube 播放列表、TikTok 列表", "填写列表链接和数量，适合批量视频。"],
+    ["网页文章", "普通网页、知乎、公众号、小红书网页、少数派、Medium", "单条剪藏，批量放进 links.txt。"],
+    ["播客/RSS", "播客、博客、新闻源、专栏", "把 RSS / Atom 地址放入 RSS 文本框。"],
+    ["本地资料", "PDF、字幕、音频、视频、图片、文本、Markdown、EPUB", "目录扫描支持图片入库；配置 OCR 后可识别图片文字。"],
+    ["多输出", "Markdown、HTML、Excel/CSV、Notion", "在配置页开启输出格式，后续处理会同步写入。"],
   ];
   return `<div class="connector-grid compact">
     ${connectors
@@ -1157,6 +1557,55 @@ function renderSourceConnectorGrid(): string {
       )
       .join("")}
   </div>`;
+}
+
+function renderSourcePluginManager(): string {
+  return `
+    <section class="panel source-plugins">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Source plugins</span>
+          <h2>来源插件</h2>
+        </div>
+        <button id="save-source-plugin" ${disabledAttr()}>保存插件</button>
+      </div>
+      <div class="plugin-grid">
+        ${state.customSourcePlugins
+          .map(
+            (plugin) => `
+              <div class="plugin-card">
+                <div>
+                  <b>${escapeHtml(plugin.name)}</b>
+                  <span>${escapeHtml(sourceModeLabel(plugin.mode))}</span>
+                </div>
+                <p>${escapeHtml(plugin.description || plugin.sample || "自定义来源入口")}</p>
+                <div class="row-actions">
+                  <button data-apply-source-plugin="${escapeAttr(plugin.id)}" ${disabledAttr()}>应用</button>
+                  <button data-delete-source-plugin="${escapeAttr(plugin.id)}" ${disabledAttr()}>删除</button>
+                </div>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+      <div class="form-grid">
+        ${field("插件名称", "source-plugin-name", "")}
+        ${selectField("类型", "source-plugin-mode", [["links", "链接批量"], ["rss", "RSS"], ["webpage", "网页"], ["directory", "本地目录"]])}
+        ${field("示例链接或路径", "source-plugin-sample", "")}
+        ${field("说明", "source-plugin-description", "")}
+      </div>
+    </section>
+  `;
+}
+
+function sourceModeLabel(mode: CustomSourcePlugin["mode"]): string {
+  const labels: Record<CustomSourcePlugin["mode"], string> = {
+    links: "链接批量",
+    rss: "RSS",
+    webpage: "网页",
+    directory: "本地目录",
+  };
+  return labels[mode];
 }
 
 function renderQueueView(): string {
@@ -1268,14 +1717,55 @@ function renderTemplatesView(): string {
           ${checkbox("写入原始转写", "cfg-note-include-transcript", draft.note_template.include_transcript)}
           ${checkbox("写入处理备注", "cfg-note-include-source-notes", draft.note_template.include_source_notes)}
           ${field("署名", "cfg-note-attribution", draft.note_template.attribution_name)}
+          <label class="field wide">
+            <span>自定义 Markdown 结构</span>
+            <textarea id="cfg-note-custom-structure" rows="13" placeholder="${escapeAttr(defaultCustomStructure())}">${escapeHtml(draft.note_template.custom_structure)}</textarea>
+          </label>
+          <div class="placeholder-grid">
+            ${["title", "url", "summary", "key_points", "action_items", "source_notes", "transcript"]
+              .map((name) => `<code>{{${name}}}</code>`)
+              .join("")}
+          </div>
           <div class="template-preview">
             <b>当前笔记结构</b>
-            <span>frontmatter、摘要、知识点、行动清单、可选处理备注、可选原文、自动署名。</span>
+            <span>留空使用预设结构；填写后会按自定义 Markdown 骨架输出，并自动保留 frontmatter 与署名。</span>
           </div>
+          ${renderTemplateLibrary()}
         </section>
       </div>
       ${hiddenTemplateConfig(draft)}
       ${renderMessageArea()}
+    </section>
+  `;
+}
+
+function renderTemplateLibrary(): string {
+  return `
+    <section class="template-library">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Local library</span>
+          <h3>模板库</h3>
+        </div>
+      </div>
+      <div class="inline-form">
+        ${selectField(
+          "已保存模板",
+          "template-library-select",
+          [["", "选择模板"], ...state.savedTemplates.map((template) => [template.id, template.name] as [string, string])],
+        )}
+        ${field("模板名", "template-library-name", "")}
+      </div>
+      <div class="toolbar">
+        <button id="template-save-library" ${disabledAttr()}>保存到模板库</button>
+        <button id="template-load-library" ${disabledAttr()} ${state.savedTemplates.length ? "" : "disabled"}>加载</button>
+        <button id="template-delete-library" ${disabledAttr()} ${state.savedTemplates.length ? "" : "disabled"}>删除</button>
+        <button id="template-import-library" ${disabledAttr()}>导入 JSON</button>
+      </div>
+      <label class="field wide">
+        <span>模板库 JSON</span>
+        <textarea id="template-library-json" rows="4">${escapeHtml(JSON.stringify(state.savedTemplates, null, 2))}</textarea>
+      </label>
     </section>
   `;
 }
@@ -1298,6 +1788,25 @@ function noteTemplateOptions(): Array<[string, string]> {
     ["research_note", "研究笔记"],
     ["action_note", "行动清单"],
   ];
+}
+
+function defaultCustomStructure(): string {
+  return [
+    "## 一句话总结",
+    "{{summary}}",
+    "",
+    "## 核心知识点",
+    "{{key_points}}",
+    "",
+    "## 可执行清单",
+    "{{action_items}}",
+    "",
+    "## 处理备注",
+    "{{source_notes}}",
+    "",
+    "## 原始转写",
+    "{{transcript}}",
+  ].join("\n");
 }
 
 function promptTemplateCards(active: string): string {
@@ -1364,7 +1873,7 @@ function renderLogsView(): string {
       <div class="view-header">
         <div>
           <span class="eyebrow">Diagnostics</span>
-          <h1>诊断</h1>
+          <h1>诊断与日志</h1>
         </div>
         <div class="toolbar">
           <button id="doctor-json" ${disabledAttr()}>重新检查</button>
@@ -1381,10 +1890,11 @@ function renderLogsView(): string {
       <section class="panel">
         <div class="section-head">
           <div>
-            <span class="eyebrow">Technical logs</span>
-            <h2>技术日志</h2>
+            <span class="eyebrow">Troubleshooting files</span>
+            <h2>排障文件</h2>
           </div>
         </div>
+        <p class="muted">普通使用先看上面的处理建议；只有反复失败时，再把这些文件发给维护者排查。</p>
         ${rows || '<p class="muted">暂无日志文件。</p>'}
       </section>
       ${renderMessageArea()}
@@ -1448,6 +1958,7 @@ function readableCheckName(name: string): string {
     "douyin-downloader": "抖音下载器",
     whisper: "Whisper 转写",
     funasr: "FunASR 转写",
+    ocr: "OCR 图片识别",
     llm_api_key: "LLM API Key",
     obsidian_rest_key: "Obsidian REST Key",
     output_formats: "输出格式",
@@ -1460,6 +1971,7 @@ function readableCheckAction(name: string, detail: string): string {
   if (name === "llm_api_key") return "到配置页填写 DeepSeek API Key，或关闭 LLM。";
   if (name === "obsidian_vault") return "到配置页选择真实存在的输出目录。";
   if (name === "notion_credentials") return "如果开启 Notion 输出，请填写 Token 和 Database ID。";
+  if (name === "ocr") return "需要图片识别时，在高级页填写可用的 OCR 命令；不处理图片可忽略。";
   if (["yt-dlp", "ffmpeg", "whisper", "funasr", "douyin-downloader"].includes(name)) return "到依赖页重新检测，并按提示安装或填写路径。";
   return detail || "按配置页提示修正后重新检查。";
 }
@@ -1547,6 +2059,7 @@ function renderSettingsView(): string {
         ${field("douyin config", "cfg-douyin-config", draft.tools.douyin_config)}
         ${field("whisper", "cfg-whisper", draft.tools.whisper)}
         ${field("funasr", "cfg-funasr", draft.tools.funasr)}
+        ${field("OCR command", "cfg-ocr", draft.tools.ocr)}
       </div>
       <div class="split">
         <section class="panel">
@@ -1560,13 +2073,10 @@ function renderSettingsView(): string {
         <section class="panel">
           <span class="eyebrow">Privacy</span>
           <h2>隐私与备份</h2>
-          <div class="privacy-list">
-            <span>API Key 不在界面回显；留空保存会保留原值。</span>
-            <span>账号登录态只保存在本机 accounts 目录。</span>
-            <span>备份包可能包含配置和登录态，不要公开分享。</span>
-          </div>
+          ${renderSecurityPanel()}
         </section>
       </div>
+      ${renderEditionPanel()}
       <section class="panel">
         <div class="section-head">
           <div>
@@ -1576,14 +2086,64 @@ function renderSettingsView(): string {
           <button id="write-launcher" ${disabledAttr()}>生成启动器</button>
         </div>
         <div class="installer-steps">
-          <span>桌面快捷方式：已支持</span>
+          <span>当前版本：${escapeHtml(state.appVersion || "未知")}</span>
+          <span>当前形态：${escapeHtml(isCommercialEdition ? "商业分发版" : "开源完整版")}</span>
+          <span>桌面快捷方式：启动器和安装包均支持</span>
           <span>开始菜单/卸载：安装包提供</span>
-          <span>版本升级：更新页检查并打开安装包</span>
-          <span>首次使用：配置页完成输出目录、LLM、依赖、账号</span>
+          <span>首次使用：引导页完成输出目录、LLM、依赖、账号</span>
+          <span>版本策略：${escapeHtml(isCommercialEdition ? "固定交付" : "走 GitHub Release")}</span>
         </div>
       </section>
       ${hiddenCoreConfig(draft)}
       ${renderMessageArea()}
+    </section>
+  `;
+}
+
+function renderSecurityPanel(): string {
+  const status = state.status;
+  const apiState = status?.llm.api_key_configured ? "已配置，不在界面回显" : "未配置";
+  const notionState = status?.outputs?.notion_configured ? "已配置" : "未配置";
+  const accountsState = state.accounts.length ? `${state.accounts.length} 个本机账号资料` : "未保存账号资料";
+  return `
+    <div class="privacy-list">
+      <span>LLM API Key：${escapeHtml(apiState)}</span>
+      <span>Notion：${escapeHtml(notionState)}</span>
+      <span>账号登录态：${escapeHtml(accountsState)}</span>
+      <span>备份包可能包含配置和登录态，不要公开分享。</span>
+      <span>开源版不要提交 config.toml、accounts、cache、data 和本机导出内容。</span>
+    </div>
+  `;
+}
+
+function renderEditionPanel(): string {
+  if (!isCommercialEdition) {
+    return `
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Edition</span>
+            <h2>开源完整版</h2>
+          </div>
+          <button data-view="updates">GitHub 更新</button>
+        </div>
+        <p class="muted">保留 GitHub Release、源码、Docker 和完整功能，适合自己部署或二次开发。</p>
+      </section>
+    `;
+  }
+  return `
+    <section class="panel">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Edition</span>
+          <h2>商业版</h2>
+        </div>
+      </div>
+      <div class="update-grid">
+        <div class="update-card"><span>当前版本</span><b>${escapeHtml(state.appVersion || "未知")}</b></div>
+        <div class="update-card ok"><span>升级策略</span><b>固定交付</b></div>
+        <div class="update-card"><span>说明</span><b>商业版只使用当前交付版本。</b></div>
+      </div>
     </section>
   `;
 }
@@ -1608,6 +2168,7 @@ function hiddenAdvancedConfig(draft: AppConfigDraft): string {
     ${hidden("cfg-douyin-config", draft.tools.douyin_config)}
     ${hidden("cfg-whisper", draft.tools.whisper)}
     ${hidden("cfg-funasr", draft.tools.funasr)}
+    ${hidden("cfg-ocr", draft.tools.ocr)}
     ${hiddenOutputConfig(draft)}
   `;
 }
@@ -1673,12 +2234,27 @@ function renderLoadingView(title: string): string {
 }
 
 function renderMessageArea(): string {
+  const progress = state.progressSteps.length
+    ? `<div class="progress-steps">
+        ${state.progressSteps
+          .map(
+            (step) => `
+              <div class="progress-step ${step.status}">
+                <span class="progress-dot"></span>
+                <div><b>${escapeHtml(step.label)}</b><small>${escapeHtml(step.detail)}</small></div>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>`
+    : "";
   return `
     ${
       state.busy
         ? `<div class="progress-card"><div class="progress-track"><div class="progress-bar"></div></div><span>${escapeHtml(state.message || "正在运行...")}</span></div>`
         : ""
     }
+    ${progress}
     ${state.message && !state.busy ? `<pre class="message">${escapeHtml(state.message)}</pre>` : ""}
     ${state.error ? `<pre class="error">${escapeHtml(state.error)}</pre>` : ""}
   `;
@@ -1709,6 +2285,68 @@ function renderBanner(): string {
   `;
 }
 
+function renderOnboarding(): string {
+  if (localStorage.getItem(STORAGE_KEYS.onboardingDone) === "1") return "";
+  const status = state.status;
+  const requiredMissing = state.dependencies?.items.filter((item) => item.status !== "ready" && item.installable).length ?? 0;
+  const steps = [
+    {
+      label: "选择输出",
+      done: Boolean(status?.paths.obsidian_vault),
+      view: "setup",
+      text: status?.paths.obsidian_vault || "先选择 Markdown/Obsidian 输出目录。",
+    },
+    {
+      label: "配置摘要",
+      done: Boolean(status?.llm.enabled && status.llm.api_key_configured),
+      view: "setup",
+      text: status?.llm.enabled ? "补 API Key 后可自动摘要和打标签。" : "不开启也能生成基础 Markdown。",
+    },
+    {
+      label: "安装依赖",
+      done: requiredMissing === 0,
+      view: "dependencies",
+      text: requiredMissing === 0 ? "核心工具已就绪。" : "安装 yt-dlp / ffmpeg 等可自动处理视频。",
+    },
+    {
+      label: "添加账号",
+      done: state.accounts.length > 0,
+      view: "accounts",
+      text: state.accounts.length ? `${state.accounts.length} 个账号已保存。` : "抖音收藏等账号来源需要先登录。",
+    },
+    {
+      label: "开始运行",
+      done: (status?.queue.pending ?? 0) > 0 || (status?.queue.done ?? 0) > 0,
+      view: "sources",
+      text: "导入链接、RSS、本地目录或抖音收藏。",
+    },
+  ];
+  return `
+    <section class="onboarding">
+      <div class="onboarding-head">
+        <div>
+          <span class="eyebrow">First run</span>
+          <h2>${escapeHtml(appBrandName)} 初次使用</h2>
+        </div>
+        <button id="dismiss-onboarding">完成/稍后再看</button>
+      </div>
+      <div class="onboarding-steps">
+        ${steps
+          .map(
+            (step, index) => `
+              <button class="onboarding-step ${step.done ? "done" : "todo"}" data-view="${step.view}">
+                <span>${index + 1}</span>
+                <b>${escapeHtml(step.label)}</b>
+                <small>${escapeHtml(step.text)}</small>
+              </button>
+            `,
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
 function bindEvents(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.view as typeof state.activeView));
@@ -1721,6 +2359,9 @@ function bindEvents(): void {
   document.querySelector<HTMLButtonElement>("#save-config")?.addEventListener("click", () => void handleSaveConfig());
   document.querySelectorAll<HTMLButtonElement>("[data-open-output]").forEach((button) => {
     button.addEventListener("click", () => void handleOpenOutput(button.dataset.openOutput ?? ""));
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-choose-directory]").forEach((button) => {
+    button.addEventListener("click", () => void handleChooseDirectory(button.dataset.chooseDirectory ?? ""));
   });
   document.querySelector<HTMLButtonElement>("#backup-project")?.addEventListener("click", () => void handleBackupProject());
   document.querySelector<HTMLButtonElement>("#restore-project")?.addEventListener("click", () => void handleRestoreProject());
@@ -1741,8 +2382,23 @@ function bindEvents(): void {
   document.querySelector<HTMLButtonElement>("#write-launcher")?.addEventListener("click", () => runAction("生成启动器", writeLauncher));
   document.querySelector<HTMLButtonElement>("#check-updates")?.addEventListener("click", () => void handleCheckUpdates());
   document.querySelector<HTMLButtonElement>("#open-latest-release")?.addEventListener("click", () => void handleOpenLatestRelease());
+  document.querySelector<HTMLButtonElement>("#template-save-library")?.addEventListener("click", handleSaveTemplateToLibrary);
+  document.querySelector<HTMLButtonElement>("#template-load-library")?.addEventListener("click", handleLoadTemplateFromLibrary);
+  document.querySelector<HTMLButtonElement>("#template-delete-library")?.addEventListener("click", handleDeleteTemplateFromLibrary);
+  document.querySelector<HTMLButtonElement>("#template-import-library")?.addEventListener("click", handleImportTemplateLibrary);
+  document.querySelector<HTMLButtonElement>("#save-source-plugin")?.addEventListener("click", handleSaveSourcePlugin);
+  document.querySelectorAll<HTMLButtonElement>("[data-apply-source-plugin]").forEach((button) => {
+    button.addEventListener("click", () => handleApplySourcePlugin(button.dataset.applySourcePlugin ?? ""));
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-delete-source-plugin]").forEach((button) => {
+    button.addEventListener("click", () => handleDeleteSourcePlugin(button.dataset.deleteSourcePlugin ?? ""));
+  });
   document.querySelector<HTMLButtonElement>("#dismiss-banner")?.addEventListener("click", () => {
     state.bannerDismissed = true;
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#dismiss-onboarding")?.addEventListener("click", () => {
+    localStorage.setItem(STORAGE_KEYS.onboardingDone, "1");
     render();
   });
   document.querySelectorAll<HTMLButtonElement>("[data-add-account]").forEach((button) => {
@@ -1788,7 +2444,7 @@ function bindEvents(): void {
 }
 
 function render(): void {
-  app.innerHTML = `<div class="shell"><aside><div class="brand"><b>Ingest Studio</b><span>local knowledge pipeline</span></div>${renderNav()}</aside><main>${renderBanner()}${renderView()}</main></div>`;
+  app.innerHTML = `<div class="shell ${isCommercialEdition ? "commercial-edition" : "community-edition"}"><aside><div class="brand"><b>${escapeHtml(appBrandName)}</b><span>${escapeHtml(appBrandSubtitle)}</span></div>${renderNav()}</aside><main>${renderBanner()}${renderOnboarding()}${renderView()}</main></div>`;
   bindEvents();
 }
 
@@ -1798,6 +2454,10 @@ function disabledAttr(): string {
 
 function field(label: string, id: string, value: string, type = "text"): string {
   return `<label class="field"><span>${escapeHtml(label)}</span><input id="${id}" type="${type}" value="${escapeAttr(value)}" /></label>`;
+}
+
+function pathField(label: string, id: string, value: string): string {
+  return `<label class="field path-field"><span>${escapeHtml(label)}</span><div class="path-input"><input id="${id}" type="text" value="${escapeAttr(value)}" /><button type="button" data-choose-directory="${escapeAttr(id)}" ${disabledAttr()}>选择</button></div></label>`;
 }
 
 function checkbox(label: string, id: string, checkedValue: boolean): string {

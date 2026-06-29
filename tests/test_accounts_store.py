@@ -13,7 +13,7 @@ class AccountStoreTest(unittest.TestCase):
     def test_platforms_cover_supported_account_sources(self) -> None:
         self.assertEqual(
             {platform.value for platform in Platform},
-            {"douyin", "bilibili", "youtube", "tiktok"},
+            {"douyin", "bilibili", "youtube", "tiktok", "zhihu", "xiaohongshu", "wechat"},
         )
 
     def test_adds_accounts_and_keeps_one_current_account_per_platform(self) -> None:

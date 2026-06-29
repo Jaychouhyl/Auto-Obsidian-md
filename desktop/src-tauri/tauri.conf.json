@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Obsidian Ingest Studio",
+  "productName": "Ingest Studio",
   "version": "0.4.4",
-  "identifier": "com.local.obsidianingest",
+  "identifier": "com.local.ingeststudio",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "node_modules\\.bin\\tsc.cmd && node_modules\\.bin\\vite.cmd build",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Obsidian Ingest Studio",
+        "title": "Ingest Studio",
         "width": 1180,
         "height": 760,
         "minWidth": 980,

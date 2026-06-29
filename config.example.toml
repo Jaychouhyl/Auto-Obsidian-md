@@ -16,6 +16,7 @@ douyin_downloader = "douyin-downloader"
 douyin_config = ""
 whisper = "whisper"
 funasr = "funasr"
+ocr = "builtin"
 
 [llm]
 enabled = false
@@ -43,6 +44,7 @@ active_template = "study_note"
 include_transcript = true
 include_source_notes = true
 attribution_name = "小黄狗"
+custom_structure = ""
 
 [routing]
 enabled = true

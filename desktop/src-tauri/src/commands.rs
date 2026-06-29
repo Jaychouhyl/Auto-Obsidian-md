@@ -91,6 +91,7 @@ pub struct ToolConfigDraft {
     douyin_config: String,
     whisper: String,
     funasr: String,
+    ocr: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -116,6 +117,7 @@ pub struct NoteTemplateConfigDraft {
     include_transcript: bool,
     include_source_notes: bool,
     attribution_name: String,
+    custom_structure: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -149,7 +151,12 @@ pub struct SourceFiles {
 }
 
 fn toml_string(value: &str) -> String {
-    let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+        .replace('"', "\\\"");
     format!("\"{}\"", escaped)
 }
 
@@ -225,7 +232,7 @@ fn render_config(draft: &AppConfigDraft) -> String {
         .join(", ");
 
     format!(
-        "[paths]\nqueue_db = {}\ncache_dir = {}\n\n[obsidian]\nmode = {}\nvault_path = {}\nfolder = {}\nrest_base_url = {}\nrest_api_key = {}\n\n[tools]\nyt_dlp = {}\nffmpeg = {}\ndouyin_downloader = {}\ndouyin_config = {}\nwhisper = {}\nfunasr = {}\n\n[llm]\nenabled = {}\nprovider = {}\nbase_url = {}\napi_key = {}\nmodel = {}\nlanguage = {}\n\n[outputs]\nformats = [{}]\nhtml_dir = {}\ncsv_path = {}\nnotion_token = {}\nnotion_database_id = {}\nnotion_title_property = {}\nnotion_api_base = {}\n\n[prompt]\nactive_template = {}\ncustom_instruction = {}\n\n[note_template]\nactive_template = {}\ninclude_transcript = {}\ninclude_source_notes = {}\nattribution_name = {}\n\n[routing]\nenabled = {}\nfallback_folder = {}\nallowed_folders = [\n{}\n]\n",
+        "[paths]\nqueue_db = {}\ncache_dir = {}\n\n[obsidian]\nmode = {}\nvault_path = {}\nfolder = {}\nrest_base_url = {}\nrest_api_key = {}\n\n[tools]\nyt_dlp = {}\nffmpeg = {}\ndouyin_downloader = {}\ndouyin_config = {}\nwhisper = {}\nfunasr = {}\nocr = {}\n\n[llm]\nenabled = {}\nprovider = {}\nbase_url = {}\napi_key = {}\nmodel = {}\nlanguage = {}\n\n[outputs]\nformats = [{}]\nhtml_dir = {}\ncsv_path = {}\nnotion_token = {}\nnotion_database_id = {}\nnotion_title_property = {}\nnotion_api_base = {}\n\n[prompt]\nactive_template = {}\ncustom_instruction = {}\n\n[note_template]\nactive_template = {}\ninclude_transcript = {}\ninclude_source_notes = {}\nattribution_name = {}\ncustom_structure = {}\n\n[routing]\nenabled = {}\nfallback_folder = {}\nallowed_folders = [\n{}\n]\n",
         toml_string(&draft.queue_db),
         toml_string(&draft.cache_dir),
         toml_string(&draft.obsidian_mode),
@@ -239,6 +246,7 @@ fn render_config(draft: &AppConfigDraft) -> String {
         toml_string(&draft.tools.douyin_config),
         toml_string(&draft.tools.whisper),
         toml_string(&draft.tools.funasr),
+        toml_string(&draft.tools.ocr),
         toml_bool(draft.llm_enabled),
         toml_string(&draft.llm_provider),
         toml_string(&draft.llm_base_url),
@@ -258,6 +266,7 @@ fn render_config(draft: &AppConfigDraft) -> String {
         toml_bool(draft.note_template.include_transcript),
         toml_bool(draft.note_template.include_source_notes),
         toml_string(&draft.note_template.attribution_name),
+        toml_string(&draft.note_template.custom_structure),
         toml_bool(draft.routing_enabled),
         toml_string(&draft.fallback_folder),
         folder_lines,
@@ -391,6 +400,59 @@ pub fn open_path(path: String) -> Result<CommandResult, String> {
         stdout: format!("Opened: {}", path),
         stderr: String::new(),
     })
+}
+
+#[tauri::command]
+pub fn choose_directory(current: String) -> Result<Option<String>, String> {
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let selected = current.replace('\'', "''");
+        let script = format!(
+            r#"
+Add-Type -AssemblyName System.Windows.Forms
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = '选择输出目录'
+$dialog.ShowNewFolderButton = $true
+$selected = '{selected}'
+if ($selected -and (Test-Path -LiteralPath $selected)) {{
+    $dialog.SelectedPath = $selected
+}}
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
+    Write-Output $dialog.SelectedPath
+}}
+"#
+        );
+        let output = Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-STA",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                &script,
+            ])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|error| error.to_string())?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(if stderr.is_empty() {
+                "Directory picker failed".to_string()
+            } else {
+                stderr
+            });
+        }
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok(if path.is_empty() { None } else { Some(path) });
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = current;
+        Ok(None)
+    }
 }
 
 #[tauri::command]

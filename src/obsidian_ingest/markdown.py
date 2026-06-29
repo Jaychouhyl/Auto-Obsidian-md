@@ -20,11 +20,11 @@ class NotePayload:
     include_transcript: bool = True
     include_source_notes: bool = True
     attribution_name: str = "小黄狗"
+    custom_structure: str = ""
 
 
 def render_markdown_note(item: QueueItem, payload: NotePayload) -> str:
     title = item.title or _title_from_url(item.url)
-    labels = _section_labels(payload.active_template)
     lines = [
         "---",
         f"source: {item.platform}",
@@ -39,6 +39,28 @@ def render_markdown_note(item: QueueItem, payload: NotePayload) -> str:
         "",
         f"# {title}",
         "",
+    ]
+    custom_body = _render_custom_structure(item, payload, title)
+    if custom_body:
+        lines.extend(custom_body)
+    else:
+        lines.extend(_default_body(payload))
+    lines.extend(
+        [
+            "",
+            "---",
+            "",
+            "> 自动化写的",
+            f"> 署名：{payload.attribution_name.strip() or '小黄狗'}",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _default_body(payload: NotePayload) -> list[str]:
+    labels = _section_labels(payload.active_template)
+    lines = [
         labels["summary"],
         payload.summary.strip() or "待补充摘要。",
         "",
@@ -57,17 +79,29 @@ def render_markdown_note(item: QueueItem, payload: NotePayload) -> str:
         lines.append("```text")
         lines.append(payload.transcript.strip() or "暂无转写。")
         lines.append("```")
-    lines.extend(
-        [
-            "",
-            "---",
-            "",
-            "> 自动化写的",
-            f"> 署名：{payload.attribution_name.strip() or '小黄狗'}",
-            "",
-        ]
-    )
-    return "\n".join(lines)
+    return lines
+
+
+def _render_custom_structure(item: QueueItem, payload: NotePayload, title: str) -> list[str]:
+    template = payload.custom_structure.strip()
+    if not template:
+        return []
+    replacements = {
+        "title": title,
+        "url": item.url,
+        "summary": payload.summary.strip() or "待补充摘要。",
+        "key_points": "\n".join(_bullet_lines(payload.key_points, fallback="待补充知识点。")),
+        "action_items": "\n".join(_bullet_lines(payload.action_items, fallback="待补充行动项。")),
+        "source_notes": "\n".join(_bullet_lines(payload.source_notes)) if payload.include_source_notes else "",
+        "transcript": payload.transcript.strip() if payload.include_transcript else "",
+    }
+    rendered = template
+    for key, value in replacements.items():
+        rendered = rendered.replace("{{" + key + "}}", value)
+    lines = [line.rstrip() for line in rendered.splitlines()]
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return lines or []
 
 
 def _bullet_lines(values: list[str], fallback: str | None = None) -> list[str]:

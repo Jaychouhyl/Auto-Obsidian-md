@@ -50,6 +50,7 @@ def status_payload(config: AppConfig, queue_counts: dict[str, int]) -> dict[str,
             "douyin_config": config.tools.douyin_config,
             "whisper": config.tools.whisper,
             "funasr": config.tools.funasr,
+            "ocr": config.tools.ocr,
         },
         "llm": {
             "enabled": config.llm.enabled,
@@ -78,6 +79,7 @@ def status_payload(config: AppConfig, queue_counts: dict[str, int]) -> dict[str,
             "include_transcript": config.note_template.include_transcript,
             "include_source_notes": config.note_template.include_source_notes,
             "attribution_name": config.note_template.attribution_name,
+            "custom_structure": config.note_template.custom_structure,
         },
     }
 

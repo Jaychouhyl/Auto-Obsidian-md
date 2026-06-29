@@ -191,6 +191,40 @@ class MarkdownRenderingTest(unittest.TestCase):
         self.assertNotIn("## 原始转写", rendered)
         self.assertNotIn("内部处理备注", rendered)
 
+    def test_custom_note_structure_uses_placeholders(self):
+        item = QueueItem(
+            id=9,
+            url="https://example.com/custom",
+            title="自定义结构",
+            platform="web",
+            content_type="article",
+            created_at="2024-01-01T00:00:00",
+            updated_at="2024-01-01T00:00:00",
+            status="pending",
+            metadata={},
+            note_path=None,
+            error=None,
+        )
+
+        rendered = render_markdown_note(
+            item,
+            NotePayload(
+                summary="一句话",
+                key_points=["知识点 A"],
+                action_items=["行动 A"],
+                source_notes=["处理备注 A"],
+                transcript="原文 A",
+                custom_structure="## 我的结构\n{{summary}}\n\n### 要点\n{{key_points}}\n\n### 下一步\n{{action_items}}\n\n### 来源\n{{source_notes}}\n\n### 原文\n{{transcript}}",
+            ),
+        )
+
+        self.assertIn("## 我的结构", rendered)
+        self.assertIn("- 知识点 A", rendered)
+        self.assertIn("- 行动 A", rendered)
+        self.assertIn("- 处理备注 A", rendered)
+        self.assertIn("原文 A", rendered)
+        self.assertIn("署名：小黄狗", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

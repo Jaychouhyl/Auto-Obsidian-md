@@ -1,6 +1,6 @@
 export type QueueCounts = Record<string, number>;
 export type QueueStatus = "all" | "pending" | "processing" | "done" | "failed" | "skipped";
-export type AccountPlatform = "douyin" | "bilibili" | "youtube" | "tiktok";
+export type AccountPlatform = "douyin" | "bilibili" | "youtube" | "tiktok" | "zhihu" | "xiaohongshu" | "wechat";
 export type AccountStatus = "active" | "expired" | "unknown" | "error";
 
 export interface AccountProfile {
@@ -79,6 +79,7 @@ export interface StatusPayload {
     include_transcript: boolean;
     include_source_notes: boolean;
     attribution_name: string;
+    custom_structure: string;
   };
 }
 
@@ -110,6 +111,7 @@ export interface ToolConfigDraft {
   douyin_config: string;
   whisper: string;
   funasr: string;
+  ocr: string;
 }
 
 export interface OutputsConfigDraft {
@@ -132,6 +134,7 @@ export interface NoteTemplateConfigDraft {
   include_transcript: boolean;
   include_source_notes: boolean;
   attribution_name: string;
+  custom_structure: string;
 }
 
 export interface AppConfigDraft {
@@ -224,6 +227,29 @@ export interface ReleaseInfo {
   isNewer: boolean;
 }
 
+export interface ProgressStep {
+  id: string;
+  label: string;
+  detail: string;
+  status: "pending" | "active" | "done" | "error";
+}
+
+export interface SavedNoteTemplate {
+  id: string;
+  name: string;
+  structure: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomSourcePlugin {
+  id: string;
+  name: string;
+  mode: "links" | "rss" | "webpage" | "directory";
+  description: string;
+  sample: string;
+}
+
 export interface AppState {
   activeView: "setup" | "dependencies" | "run" | "accounts" | "sources" | "queue" | "templates" | "rules" | "logs" | "knowledge" | "updates" | "settings";
   queueStatus: QueueStatus;
@@ -242,4 +268,7 @@ export interface AppState {
   bannerDismissed: boolean;
   appVersion: string;
   latestRelease: ReleaseInfo | null;
+  progressSteps: ProgressStep[];
+  savedTemplates: SavedNoteTemplate[];
+  customSourcePlugins: CustomSourcePlugin[];
 }

@@ -28,6 +28,10 @@ def run_doctor(config: AppConfig) -> list[DoctorCheck]:
         "funasr": config.tools.funasr,
     }.items():
         checks.append(DoctorCheck(name, tool_available(command), command))
+    ocr_value = config.tools.ocr.strip()
+    ocr_builtin = ocr_value.lower() in {"", "builtin"}
+    ocr_detail = "builtin" if ocr_builtin else ocr_value
+    checks.append(DoctorCheck("ocr", ocr_builtin or tool_available(ocr_value), ocr_detail))
     if config.llm.enabled:
         llm_detail = "configured" if config.llm.api_key else "missing; set DEEPSEEK_API_KEY or api_key"
     else:

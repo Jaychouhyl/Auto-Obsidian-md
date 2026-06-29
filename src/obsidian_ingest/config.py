@@ -30,6 +30,7 @@ class ToolsConfig:
     douyin_config: str
     whisper: str
     funasr: str
+    ocr: str
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,7 @@ class NoteTemplateConfig:
     include_transcript: bool
     include_source_notes: bool
     attribution_name: str
+    custom_structure: str
 
 
 @dataclass(frozen=True)
@@ -152,6 +154,7 @@ def load_config(config_path: Path) -> AppConfig:
             douyin_config=str(tools.get("douyin_config", "")),
             whisper=str(tools.get("whisper", "whisper")),
             funasr=str(tools.get("funasr", "funasr")),
+            ocr=str(tools.get("ocr", "builtin")),
         ),
         llm=LlmConfig(
             enabled=bool(llm.get("enabled", False)),
@@ -184,6 +187,7 @@ def load_config(config_path: Path) -> AppConfig:
             include_transcript=bool(note_template.get("include_transcript", True)),
             include_source_notes=bool(note_template.get("include_source_notes", True)),
             attribution_name=str(note_template.get("attribution_name", "小黄狗")).strip() or "小黄狗",
+            custom_structure=str(note_template.get("custom_structure", "")).strip(),
         ),
     )
 
@@ -283,6 +287,7 @@ douyin_downloader = "douyin-dl"
 douyin_config = ""
 whisper = "whisper"
 funasr = "funasr"
+ocr = "builtin"
 
 [llm]
 enabled = false
@@ -310,6 +315,7 @@ active_template = "study_note"
 include_transcript = true
 include_source_notes = true
 attribution_name = "小黄狗"
+custom_structure = ""
 
 [routing]
 enabled = true

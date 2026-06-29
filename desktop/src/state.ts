@@ -21,6 +21,9 @@ export const state: AppState = {
   bannerDismissed: false,
   appVersion: "",
   latestRelease: null,
+  progressSteps: [],
+  savedTemplates: [],
+  customSourcePlugins: [],
 };
 
 export function setBusy(value: boolean): void {

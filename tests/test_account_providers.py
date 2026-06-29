@@ -8,6 +8,7 @@ from obsidian_ingest.accounts.providers.base import AccountIdentityError
 from obsidian_ingest.accounts.providers.bilibili import BilibiliProvider
 from obsidian_ingest.accounts.providers.douyin import DouyinProvider
 from obsidian_ingest.accounts.providers.tiktok import TikTokProvider
+from obsidian_ingest.accounts.providers.web_accounts import WeChatProvider, XiaohongshuProvider, ZhihuProvider
 from obsidian_ingest.accounts.providers.youtube import YouTubeProvider
 
 
@@ -76,11 +77,41 @@ class AccountProviderTest(unittest.TestCase):
         self.assertEqual(candidate.display_name, "Study Account")
         self.assertEqual(candidate.platform_user_id, "study_account")
 
+    def test_parses_zhihu_identity(self) -> None:
+        html = '{"fullname":"知乎学习号","urlToken":"study-zhihu"}'
+
+        candidate = ZhihuProvider().parse_identity(html, page_title="知乎")
+
+        self.assertEqual(candidate.display_name, "知乎学习号")
+        self.assertEqual(candidate.platform_user_id, "study-zhihu")
+        self.assertEqual(candidate.platform, Platform.ZHIHU)
+
+    def test_parses_xiaohongshu_identity(self) -> None:
+        html = '{"nickname":"小红书学习号","userId":"xhs-100"}'
+
+        candidate = XiaohongshuProvider().parse_identity(html, page_title="小红书")
+
+        self.assertEqual(candidate.display_name, "小红书学习号")
+        self.assertEqual(candidate.platform_user_id, "xhs-100")
+        self.assertEqual(candidate.platform, Platform.XIAOHONGSHU)
+
+    def test_parses_wechat_identity(self) -> None:
+        html = '{"nickname":"公众号学习号","fakeid":"wechat-100"}'
+
+        candidate = WeChatProvider().parse_identity(html, page_title="微信公众平台")
+
+        self.assertEqual(candidate.display_name, "公众号学习号")
+        self.assertEqual(candidate.platform_user_id, "wechat-100")
+        self.assertEqual(candidate.platform, Platform.WECHAT)
+
     def test_reports_unrecognized_identity(self) -> None:
         cases = [
             (DouyinProvider(), "<html>登录</html>"),
             (YouTubeProvider(), "<html>Sign in</html>"),
             (TikTokProvider(), "<html>Log in</html>"),
+            (ZhihuProvider(), "<html>登录</html>"),
+            (XiaohongshuProvider(), "<html>登录</html>"),
+            (WeChatProvider(), "<html>登录</html>"),
         ]
         for provider, html in cases:
             with self.subTest(platform=provider.platform.value):

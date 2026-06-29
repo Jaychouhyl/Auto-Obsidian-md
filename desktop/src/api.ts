@@ -53,6 +53,10 @@ export async function openPath(path: string): Promise<CommandResult> {
   return invoke<CommandResult>("open_path", { path });
 }
 
+export async function chooseDirectory(current: string): Promise<string | null> {
+  return invoke<string | null>("choose_directory", { current });
+}
+
 export async function openUrl(url: string): Promise<CommandResult> {
   return invoke<CommandResult>("open_url", { url });
 }

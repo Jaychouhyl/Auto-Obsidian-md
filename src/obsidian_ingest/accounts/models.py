@@ -10,6 +10,9 @@ class Platform(StrEnum):
     BILIBILI = "bilibili"
     YOUTUBE = "youtube"
     TIKTOK = "tiktok"
+    ZHIHU = "zhihu"
+    XIAOHONGSHU = "xiaohongshu"
+    WECHAT = "wechat"
 
 
 class AccountStatus(StrEnum):

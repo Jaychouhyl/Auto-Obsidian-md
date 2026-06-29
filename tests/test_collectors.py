@@ -136,12 +136,14 @@ class InboxCollectorTest(unittest.TestCase):
             root = Path(tmp)
             (root / "a.pdf").write_text("pdf", encoding="utf-8")
             (root / "b.mp3").write_text("mp3", encoding="utf-8")
+            (root / "c.png").write_bytes(b"png")
             (root / "ignore.tmp").write_text("tmp", encoding="utf-8")
 
             files = scan_inbox_files(root)
 
-            self.assertEqual([path.name for path in files], ["a.pdf", "b.mp3"])
+            self.assertEqual([path.name for path in files], ["a.pdf", "b.mp3", "c.png"])
             self.assertIn(".pdf", SUPPORTED_INBOX_EXTENSIONS)
+            self.assertIn(".png", SUPPORTED_INBOX_EXTENSIONS)
 
 
 if __name__ == "__main__":

@@ -74,6 +74,7 @@ def process_item(config: AppConfig, store: QueueStore, item: QueueItem) -> Pipel
                 douyin_cmd=config.tools.douyin_downloader,
                 douyin_config=douyin_config,
                 cookies_file=cookie_path,
+                ocr_cmd=config.tools.ocr,
                 dry_run_missing_tools=True,
             )
         transcription = transcribe_source(
@@ -110,6 +111,7 @@ def process_item(config: AppConfig, store: QueueStore, item: QueueItem) -> Pipel
             include_transcript=config.note_template.include_transcript,
             include_source_notes=config.note_template.include_source_notes,
             attribution_name=config.note_template.attribution_name,
+            custom_structure=config.note_template.custom_structure,
         )
         note = render_markdown_note(item, payload)
         writer = build_writer(config)

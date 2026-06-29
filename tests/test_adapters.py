@@ -68,6 +68,20 @@ class AdapterTest(unittest.TestCase):
             self.assertIn("第一条知识点", result.transcript_hint)
             self.assertNotIn("00:00", result.transcript_hint)
 
+    def test_acquire_source_accepts_local_image_without_ocr(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            image = Path(tmp) / "note.png"
+            image.write_bytes(b"fake image")
+
+            result = acquire_source(
+                AcquisitionRequest(url=str(image), platform="local_file", output_dir=Path(tmp)),
+                dry_run_missing_tools=True,
+            )
+
+            self.assertEqual(result.status, "local_image")
+            self.assertIn("图片文件", result.transcript_hint)
+            self.assertIn("内置 OCR", "\n".join(result.notes))
+
     def test_builds_whisper_command(self):
         command = build_transcription_command(Path("audio.mp3"), engine="whisper", whisper_cmd="whisper")
 
