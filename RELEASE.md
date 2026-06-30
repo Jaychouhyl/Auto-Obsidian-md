@@ -7,7 +7,8 @@
 - `.\packaging\build-sidecar.ps1`
 - `npm run build` in `desktop`
 - `cargo check` in `desktop/src-tauri`
-- 商业版不提供应用内更新入口；交付什么安装包就是什么版本。
+- 个人版/商业版不提供应用内更新入口；交付什么安装包就是什么版本。
+- GitHub 公开 Release 只发布开源完整版，不上传个人版或商业版。
 - `docker compose config --quiet`
 - `docker compose run --rm ingest doctor --json --config /app/config.docker.toml`
 - 确认 `config.toml`、`douyin-config.yml`、`links.txt`、`feeds.txt` 未被提交。
@@ -17,6 +18,7 @@
 ```powershell
 cd <项目目录>
 .\packaging\build-desktop-edition.ps1 -Edition community
+.\packaging\build-desktop-edition.ps1 -Edition personal
 .\packaging\build-desktop-edition.ps1 -Edition commercial
 ```
 
@@ -26,10 +28,19 @@ cd <项目目录>
 
 ```text
 build/open-source-full-v<version>/
+build/personal-v<version>/
 build/commercial-v<version>/
 ```
 
-开源完整版使用 `Ingest Studio` 的产品名、窗口标题和安装包名；商业版使用 `Knowledge Studio` 的产品名、窗口标题和安装包名。
+开源完整版使用 `Ingest Studio` 的产品名、窗口标题和安装包名；个人版和商业版使用 `Knowledge Studio` 的产品名、窗口标题和安装包名。
+
+清理旧构建产物：
+
+```powershell
+.\packaging\clean-build.ps1
+```
+
+默认只清理 `build` 下的旧测试包和旧版本目录，不触碰配置、账号、队列、缓存或 Obsidian 输出。
 
 ## 签名
 
@@ -56,7 +67,7 @@ $env:WINDOWS_SIGN_CERT_THUMBPRINT = "<证书指纹>"
 .\packaging\verify-release.ps1
 ```
 
-脚本会检查两版产物、sidecar、配置解析、OCR 配置和签名状态。真实安装后还需要手工确认：
+脚本会检查开源完整版、个人版、商业版本地产物、sidecar、配置解析、OCR 配置和签名状态。真实安装后还需要手工确认：
 
 需要把未签名视为发布失败时使用：
 
@@ -65,6 +76,7 @@ $env:WINDOWS_SIGN_CERT_THUMBPRINT = "<证书指纹>"
 ```
 
 - 安装商业版后开始菜单 / 桌面快捷方式显示 `Knowledge Studio`。
+- 安装个人版后开始菜单 / 桌面快捷方式显示 `Knowledge Studio`，界面没有 GitHub 更新入口。
 - 安装开源完整版后显示 `Ingest Studio`。
 - 商业版界面没有 GitHub、更新、私有更新或下载入口。
 - 开源完整版保留 GitHub Release 更新页。
@@ -78,7 +90,7 @@ git push origin main
 git push origin v0.04
 ```
 
-推送 `v*` tag 后，GitHub Actions 会构建 Windows 安装包并发布到 Releases。
+推送 `v*` tag 后，GitHub Actions 只构建开源完整版 Windows 安装包并发布到 Releases。个人版和商业版只在本机打包，不进入公开 GitHub Release。
 
 ## 发布后
 

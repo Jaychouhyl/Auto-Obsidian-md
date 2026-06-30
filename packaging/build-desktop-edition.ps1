@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("community", "commercial")]
+    [ValidateSet("community", "commercial", "personal")]
     [string]$Edition = "community",
     [string]$Python = "D:\python\python.exe",
     [switch]$SkipSidecar,
@@ -31,6 +31,7 @@ function Join-Chars {
 
 $CommercialLabel = Join-Chars @(0x5546, 0x4E1A, 0x7248)
 $CommunityLabel = Join-Chars @(0x5F00, 0x6E90, 0x5B8C, 0x6574, 0x7248)
+$PersonalLabel = Join-Chars @(0x4E2A, 0x4EBA, 0x7248)
 
 $EditionConfig = if ($Edition -eq "commercial") {
     @{
@@ -41,6 +42,16 @@ $EditionConfig = if ($Edition -eq "commercial") {
         OutputDir = Join-Path $ProjectRoot "build\commercial-v$Version"
         AppFile = "Knowledge Studio $CommercialLabel.exe"
         InstallerFile = "Knowledge Studio ${CommercialLabel}_${Version}_x64-setup.exe"
+    }
+} elseif ($Edition -eq "personal") {
+    @{
+        ProductName = "Knowledge Studio"
+        WindowTitle = "Knowledge Studio"
+        Identifier = "com.local.knowledgestudio.personal"
+        EnvEdition = "personal"
+        OutputDir = Join-Path $ProjectRoot "build\personal-v$Version"
+        AppFile = "Knowledge Studio $PersonalLabel.exe"
+        InstallerFile = "Knowledge Studio ${PersonalLabel}_${Version}_x64-setup.exe"
     }
 } else {
     @{

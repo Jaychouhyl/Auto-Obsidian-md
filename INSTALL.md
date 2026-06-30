@@ -2,8 +2,8 @@
 
 ## Windows 安装
 
-1. 从 GitHub Releases 下载 Windows 安装包。
-2. 安装后启动 `Obsidian Ingest Studio`。
+1. 从 GitHub Releases 下载开源完整版 Windows 安装包，或使用本机打出的个人版安装包。
+2. 安装后启动 `Ingest Studio`（开源完整版）或 `Knowledge Studio`（个人版）。
 3. 在“配置”页填写 Obsidian vault 路径。
 4. 填写 DeepSeek / OpenAI-compatible 服务地址、模型和 API Key。
 5. 点击“保存”。
@@ -45,6 +45,8 @@ DeepSeek API Key
 %LOCALAPPDATA%\Obsidian Ingest Studio\config.toml
 ```
 
+个人版/商业版同样是本地工作区优先；备份包可在“配置”页创建，可能包含账号登录态和本机来源列表，不要公开上传。
+
 不会提交到 Git：
 
 ```text
@@ -63,7 +65,7 @@ accounts/
 桌面端：
 
 ```text
-Obsidian Ingest Studio
+Ingest Studio / Knowledge Studio
 ```
 
 命令行：

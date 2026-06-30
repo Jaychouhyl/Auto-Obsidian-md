@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   backupProject,
   cancelAccountLogin,
+  chooseBackupFile,
   chooseDirectory,
   clipWebpage,
   collectPlatformList,
@@ -39,7 +40,32 @@ import {
   verifyAccount,
   writeLauncher,
 } from "./api";
+import {
+  appBrandName,
+  appBrandSubtitle,
+  editionDisplayName,
+  editionInstallShape,
+  editionShellClass,
+  editionVersionStrategy,
+  isPrivateEdition,
+  isPersonalEdition,
+} from "./edition";
+import {
+  extractDouyinCollectStats,
+  readableCommandError,
+  readableCommandSuccess,
+} from "./command-messages";
 import { state, setBusy, setError, setMessage } from "./state";
+import {
+  checkbox,
+  escapeAttr,
+  escapeHtml,
+  field,
+  hidden,
+  iconSvg,
+  pathField as renderPathField,
+  selectField,
+} from "./ui";
 import type {
   AccountPlatform,
   AccountProfile,
@@ -59,10 +85,6 @@ if (!appRoot) {
 }
 
 const app = appRoot;
-const APP_EDITION = String(import.meta.env.VITE_APP_EDITION ?? "community").toLowerCase();
-const isCommercialEdition = APP_EDITION === "commercial";
-const appBrandName = isCommercialEdition ? "Knowledge Studio" : "Ingest Studio";
-const appBrandSubtitle = isCommercialEdition ? "personal knowledge workspace" : "local knowledge pipeline";
 const STORAGE_KEYS = {
   onboardingDone: "knowledgeStudio.onboarding.done",
   templates: "knowledgeStudio.templates",
@@ -420,6 +442,18 @@ async function handleChooseDirectory(targetId: string): Promise<void> {
   }
 }
 
+async function handleChooseBackupFile(): Promise<void> {
+  try {
+    const selected = await chooseBackupFile(stringFromInput("restore-backup-path"));
+    if (!selected) return;
+    const element = document.querySelector<HTMLInputElement>("#restore-backup-path");
+    if (element) element.value = selected;
+  } catch (error) {
+    setError(error instanceof Error ? error.message : String(error));
+    render();
+  }
+}
+
 async function handleBackupProject(): Promise<void> {
   setBusy(true);
   setMessage("正在创建项目备份...");
@@ -548,77 +582,6 @@ async function handleDouyin(): Promise<void> {
     setBusy(false);
     clearProgressSoon();
     render();
-  }
-}
-
-function extractQueuedCount(stdout: string): number | null {
-  try {
-    const parsed = JSON.parse(stdout) as { queued?: unknown };
-    const value = Number(parsed.queued);
-    return Number.isFinite(value) ? value : null;
-  } catch {
-    const match = stdout.match(/queued["'\s:]+(\d+)/i);
-    return match ? Number.parseInt(match[1], 10) : null;
-  }
-}
-
-function extractDouyinCollectStats(stdout: string): { requested: number | null; returned: number | null; queued: number | null; attempts: number | null } {
-  try {
-    const parsed = JSON.parse(stdout) as Record<string, unknown>;
-    return {
-      requested: numericField(parsed.requested),
-      returned: numericField(parsed.returned),
-      queued: numericField(parsed.queued),
-      attempts: numericField(parsed.attempts),
-    };
-  } catch {
-    return { requested: null, returned: null, queued: extractQueuedCount(stdout), attempts: null };
-  }
-}
-
-function numericField(value: unknown): number | null {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function readableCommandSuccess(label: string, result: CommandResult): string {
-  const payload = parseCommandJson(result.stdout);
-  if (payload) {
-    const queued = numericField(payload.queued);
-    const retried = numericField(payload.retried);
-    const totalNotes = numericField(payload.total_notes);
-    const files = Array.isArray(payload.files) ? payload.files.length : null;
-    if (queued !== null) return `${label} 完成，新增 ${queued} 个待处理任务。`;
-    if (retried !== null) return `${label} 完成，已重试 ${retried} 个失败任务。`;
-    if (totalNotes !== null) return `${label} 完成，检查了 ${totalNotes} 篇笔记。`;
-    if (files !== null) return `${label} 完成，识别到 ${files} 个文件。`;
-    if (typeof payload.launcher === "string") return `${label} 完成，启动器已生成。`;
-    if (typeof payload.backup_path === "string") return `${label} 完成，备份已创建。`;
-    return `${label} 完成。`;
-  }
-  const text = result.stdout.trim();
-  return text && text.length < 240 ? text : `${label} 完成。`;
-}
-
-function readableCommandError(label: string, result: CommandResult): string {
-  const text = result.stderr || result.stdout;
-  const payload = parseCommandJson(text);
-  if (payload) {
-    const error = payload.error;
-    if (typeof error === "string") return error;
-    if (error && typeof error === "object" && "message" in error) {
-      return String((error as { message?: unknown }).message || `${label} 失败`);
-    }
-  }
-  return text.trim() || `${label} 失败`;
-}
-
-function parseCommandJson(text: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(text) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
   }
 }
 
@@ -853,8 +816,8 @@ async function handleProcessQueue(): Promise<void> {
 }
 
 async function handleCheckUpdates(): Promise<void> {
-  if (isCommercialEdition) {
-    setMessage("商业版只使用当前交付的安装包版本。");
+  if (isPrivateEdition) {
+    setMessage(`${editionDisplayName()}只使用本机交付的安装包版本。`);
     render();
     return;
   }
@@ -1064,7 +1027,7 @@ function renderNav(): string {
     ["dependencies", "依赖", "Wrench"],
     ["rules", "规则", "Route"],
     ["logs", "日志", "Terminal"],
-    ...(isCommercialEdition ? [] : ([["updates", "更新", "Upload"]] as Array<[typeof state.activeView, string, string]>)),
+    ...(isPrivateEdition ? [] : ([["updates", "更新", "Upload"]] as Array<[typeof state.activeView, string, string]>)),
     ["settings", "高级", "Sliders"],
   ];
   return `
@@ -1086,24 +1049,6 @@ function renderIconButton(view: typeof state.activeView, label: string, iconName
   return `<button class="nav-icon ${state.activeView === view ? "active" : ""}" data-view="${view}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${iconSvg(iconName)}</button>`;
 }
 
-function iconSvg(name: string): string {
-  const paths: Record<string, string> = {
-    Play: '<polygon points="8 5 19 12 8 19 8 5"></polygon>',
-    User: '<path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle>',
-    Inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"></path><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6l3.5-7Z"></path>',
-    List: '<path d="M8 6h13"></path><path d="M8 12h13"></path><path d="M8 18h13"></path><path d="M3 6h.01"></path><path d="M3 12h.01"></path><path d="M3 18h.01"></path>',
-    Library: '<path d="M4 19.5V5a2 2 0 0 1 2-2h12"></path><path d="M6 17h14"></path><path d="M6 22h14"></path><path d="M6 17a2 2 0 1 0 0 4"></path>',
-    FileText: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><path d="M14 2v6h6"></path><path d="M16 13H8"></path><path d="M16 17H8"></path><path d="M10 9H8"></path>',
-    Gear: '<path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2 2 0 1 1-2.83 2.83l-.04-.04A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.06A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.04.04a2 2 0 1 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.06A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.04-.04a2 2 0 1 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.06A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.04-.04a2 2 0 1 1 2.83 2.83l-.04.04A1.7 1.7 0 0 0 19.4 9c.16.58.62 1 1.2 1H21a2 2 0 1 1 0 4h-.06a1.7 1.7 0 0 0-1.54 1Z"></path>',
-    Wrench: '<path d="M14.7 6.3a4 4 0 0 0-5 5L3 18l3 3 6.7-6.7a4 4 0 0 0 5-5l-2.8 2.8-2-2 2.8-2.8Z"></path>',
-    Route: '<circle cx="6" cy="19" r="3"></circle><circle cx="18" cy="5" r="3"></circle><path d="M9 19h1.5a3.5 3.5 0 0 0 0-7H9.5a3.5 3.5 0 0 1 0-7H15"></path>',
-    Terminal: '<path d="m4 17 6-6-6-6"></path><path d="M12 19h8"></path>',
-    Upload: '<path d="M12 3v12"></path><path d="m17 8-5-5-5 5"></path><path d="M21 21H3"></path>',
-    Sliders: '<path d="M4 21v-7"></path><path d="M4 10V3"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M20 21v-5"></path><path d="M20 12V3"></path><path d="M2 14h4"></path><path d="M10 8h4"></path><path d="M18 16h4"></path>',
-  };
-  return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name] ?? ""}</svg>`;
-}
-
 function renderView(): string {
   if (state.activeView === "setup") return renderSetupView();
   if (state.activeView === "dependencies") return renderDependenciesView();
@@ -1115,7 +1060,7 @@ function renderView(): string {
   if (state.activeView === "rules") return renderRulesView();
   if (state.activeView === "logs") return renderLogsView();
   if (state.activeView === "knowledge") return renderKnowledgeView();
-  if (state.activeView === "updates") return isCommercialEdition ? renderSettingsView() : renderUpdatesView();
+  if (state.activeView === "updates") return isPrivateEdition ? renderSettingsView() : renderUpdatesView();
   return renderSettingsView();
 }
 
@@ -1202,9 +1147,10 @@ function renderBackupPanel(): string {
       </div>
       <div class="inline-form">
         ${field("备份 zip 路径", "restore-backup-path", "")}
+        <button id="choose-backup-file" ${disabledAttr()}>选择备份</button>
         <button id="restore-project" ${disabledAttr()}>恢复备份</button>
       </div>
-      <p class="muted">备份包可能包含本机配置和登录态，请勿公开分享。</p>
+      <p class="muted">备份包用于本机迁移和故障恢复，可能包含配置、账号登录态和本地来源文件，请勿公开分享或提交到 Git。</p>
     </section>
   `;
 }
@@ -1235,11 +1181,11 @@ function renderSetupWizard(): string {
     {
       label: "输出目录",
       status: status?.paths.obsidian_vault ? "done" : "todo",
-      text: status?.paths.obsidian_vault || "先选择 Markdown/Obsidian 输出目录",
+      text: status?.paths.obsidian_vault || "选择 Markdown、Obsidian 或其它本地输出目录",
       action: "setup",
     },
     {
-      label: "LLM 摘要",
+      label: "摘要/API",
       status: status?.llm.enabled && status.llm.api_key_configured ? "done" : "todo",
       text: status?.llm.enabled
         ? status.llm.api_key_configured
@@ -1249,22 +1195,16 @@ function renderSetupWizard(): string {
       action: "setup",
     },
     {
-      label: "账号",
-      status: state.accounts.length ? "done" : "todo",
-      text: state.accounts.length ? `${state.accounts.length} 个账号可用` : "抖音/B 站/YouTube 可在账号页添加",
-      action: "accounts",
+      label: "账号与来源",
+      status: state.accounts.length || (status?.queue.pending ?? 0) > 0 || (status?.queue.done ?? 0) > 0 ? "done" : "todo",
+      text: state.accounts.length ? `${state.accounts.length} 个账号可用，也可以导入链接/RSS/文件夹` : "添加账号，或直接导入链接/RSS/本地文件夹",
+      action: state.accounts.length ? "sources" : "accounts",
     },
     {
-      label: "依赖",
+      label: "检查并运行",
       status: requiredIssues === 0 ? "done" : "todo",
-      text: requiredIssues === 0 ? "核心依赖可用" : `${requiredIssues} 项必须处理`,
-      action: "dependencies",
-    },
-    {
-      label: "输出格式",
-      status: status?.outputs?.formats?.length ? "done" : "todo",
-      text: status?.outputs?.formats?.join(" / ") || "默认 Markdown，可叠加 HTML、CSV、Notion",
-      action: "setup",
+      text: requiredIssues === 0 ? `已就绪，输出 ${status?.outputs?.formats?.join(" / ") || "Markdown"}` : `${requiredIssues} 项必须处理`,
+      action: requiredIssues === 0 ? "run" : "dependencies",
     },
   ];
   return `
@@ -1866,7 +1806,15 @@ function renderRuleCard(folder: string): string {
 function renderLogsView(): string {
   const issues = diagnosticIssues();
   const rows = state.logs
-    .map((log) => `<div class="log-row"><b>${escapeHtml(log.name)}</b><span>${escapeHtml(log.path)}</span></div>`)
+    .map(
+      (log) => `<div class="log-row">
+        <b>${escapeHtml(readableLogLabel(log.name))}</b>
+        <span>
+          ${escapeHtml(readableLogTime(log.modified_unix))}
+          <small>${escapeHtml(log.name)} · ${escapeHtml(log.path)}</small>
+        </span>
+      </div>`,
+    )
     .join("");
   return `
     <section class="view">
@@ -1900,6 +1848,32 @@ function renderLogsView(): string {
       ${renderMessageArea()}
     </section>
   `;
+}
+
+function readableLogLabel(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.includes("doctor")) return "环境检查记录";
+  if (lower.includes("dependency")) return "依赖安装/检测记录";
+  if (lower.includes("douyin")) return "抖音收藏抓取记录";
+  if (lower.includes("queue") || lower.includes("run")) return "队列处理记录";
+  if (lower.includes("account")) return "账号登录/切换记录";
+  if (lower.includes("backup") || lower.includes("restore")) return "备份恢复记录";
+  return "运行记录";
+}
+
+function readableLogTime(modifiedUnix: number): string {
+  if (!modifiedUnix) return "时间未知";
+  const timestamp = modifiedUnix > 1000000000000 ? modifiedUnix : modifiedUnix * 1000;
+  try {
+    return new Intl.DateTimeFormat("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(timestamp));
+  } catch {
+    return new Date(timestamp).toLocaleString();
+  }
 }
 
 function diagnosticIssues(): Array<{ severity: "bad" | "warn"; title: string; impact: string; action: string }> {
@@ -2087,11 +2061,11 @@ function renderSettingsView(): string {
         </div>
         <div class="installer-steps">
           <span>当前版本：${escapeHtml(state.appVersion || "未知")}</span>
-          <span>当前形态：${escapeHtml(isCommercialEdition ? "商业分发版" : "开源完整版")}</span>
+          <span>当前形态：${escapeHtml(editionInstallShape())}</span>
           <span>桌面快捷方式：启动器和安装包均支持</span>
           <span>开始菜单/卸载：安装包提供</span>
           <span>首次使用：引导页完成输出目录、LLM、依赖、账号</span>
-          <span>版本策略：${escapeHtml(isCommercialEdition ? "固定交付" : "走 GitHub Release")}</span>
+          <span>版本策略：${escapeHtml(editionVersionStrategy())}</span>
         </div>
       </section>
       ${hiddenCoreConfig(draft)}
@@ -2117,7 +2091,7 @@ function renderSecurityPanel(): string {
 }
 
 function renderEditionPanel(): string {
-  if (!isCommercialEdition) {
+  if (!isPrivateEdition) {
     return `
       <section class="panel">
         <div class="section-head">
@@ -2136,13 +2110,13 @@ function renderEditionPanel(): string {
       <div class="section-head">
         <div>
           <span class="eyebrow">Edition</span>
-          <h2>商业版</h2>
+          <h2>${escapeHtml(editionDisplayName())}</h2>
         </div>
       </div>
       <div class="update-grid">
         <div class="update-card"><span>当前版本</span><b>${escapeHtml(state.appVersion || "未知")}</b></div>
         <div class="update-card ok"><span>升级策略</span><b>固定交付</b></div>
-        <div class="update-card"><span>说明</span><b>商业版只使用当前交付版本。</b></div>
+        <div class="update-card"><span>说明</span><b>${escapeHtml(isPersonalEdition ? "个人版只使用本机交付版本。" : "商业版只使用当前交付版本。")}</b></div>
       </div>
     </section>
   `;
@@ -2294,31 +2268,25 @@ function renderOnboarding(): string {
       label: "选择输出",
       done: Boolean(status?.paths.obsidian_vault),
       view: "setup",
-      text: status?.paths.obsidian_vault || "先选择 Markdown/Obsidian 输出目录。",
+      text: status?.paths.obsidian_vault || "选一个本地输出目录；不用 Obsidian 也能生成 Markdown/HTML/CSV。",
     },
     {
-      label: "配置摘要",
+      label: "摘要与 Key",
       done: Boolean(status?.llm.enabled && status.llm.api_key_configured),
       view: "setup",
       text: status?.llm.enabled ? "补 API Key 后可自动摘要和打标签。" : "不开启也能生成基础 Markdown。",
     },
     {
-      label: "安装依赖",
+      label: "账号与来源",
+      done: state.accounts.length > 0 || (status?.queue.pending ?? 0) > 0 || (status?.queue.done ?? 0) > 0,
+      view: state.accounts.length ? "sources" : "accounts",
+      text: state.accounts.length ? `${state.accounts.length} 个账号已保存，也可以继续导入链接/RSS/本地目录。` : "账号来源先登录；普通链接、RSS、本地文件可直接导入。",
+    },
+    {
+      label: "检查并运行",
       done: requiredMissing === 0,
-      view: "dependencies",
-      text: requiredMissing === 0 ? "核心工具已就绪。" : "安装 yt-dlp / ffmpeg 等可自动处理视频。",
-    },
-    {
-      label: "添加账号",
-      done: state.accounts.length > 0,
-      view: "accounts",
-      text: state.accounts.length ? `${state.accounts.length} 个账号已保存。` : "抖音收藏等账号来源需要先登录。",
-    },
-    {
-      label: "开始运行",
-      done: (status?.queue.pending ?? 0) > 0 || (status?.queue.done ?? 0) > 0,
-      view: "sources",
-      text: "导入链接、RSS、本地目录或抖音收藏。",
+      view: requiredMissing === 0 ? "run" : "dependencies",
+      text: requiredMissing === 0 ? "环境已就绪，开始抓取或处理队列。" : "安装 yt-dlp / ffmpeg 等工具后可自动处理视频。",
     },
   ];
   return `
@@ -2364,6 +2332,7 @@ function bindEvents(): void {
     button.addEventListener("click", () => void handleChooseDirectory(button.dataset.chooseDirectory ?? ""));
   });
   document.querySelector<HTMLButtonElement>("#backup-project")?.addEventListener("click", () => void handleBackupProject());
+  document.querySelector<HTMLButtonElement>("#choose-backup-file")?.addEventListener("click", () => void handleChooseBackupFile());
   document.querySelector<HTMLButtonElement>("#restore-project")?.addEventListener("click", () => void handleRestoreProject());
   document.querySelector<HTMLButtonElement>("#doctor-json")?.addEventListener("click", () => void handleDoctorJson());
   document.querySelector<HTMLButtonElement>("#install-dependencies")?.addEventListener("click", () => void handleInstallDependencies());
@@ -2444,7 +2413,7 @@ function bindEvents(): void {
 }
 
 function render(): void {
-  app.innerHTML = `<div class="shell ${isCommercialEdition ? "commercial-edition" : "community-edition"}"><aside><div class="brand"><b>${escapeHtml(appBrandName)}</b><span>${escapeHtml(appBrandSubtitle)}</span></div>${renderNav()}</aside><main>${renderBanner()}${renderOnboarding()}${renderView()}</main></div>`;
+  app.innerHTML = `<div class="shell ${editionShellClass()}"><aside><div class="brand"><b>${escapeHtml(appBrandName)}</b><span>${escapeHtml(appBrandSubtitle)}</span></div>${renderNav()}</aside><main>${renderBanner()}${renderOnboarding()}${renderView()}</main></div>`;
   bindEvents();
 }
 
@@ -2452,43 +2421,8 @@ function disabledAttr(): string {
   return state.busy ? "disabled" : "";
 }
 
-function field(label: string, id: string, value: string, type = "text"): string {
-  return `<label class="field"><span>${escapeHtml(label)}</span><input id="${id}" type="${type}" value="${escapeAttr(value)}" /></label>`;
-}
-
 function pathField(label: string, id: string, value: string): string {
-  return `<label class="field path-field"><span>${escapeHtml(label)}</span><div class="path-input"><input id="${id}" type="text" value="${escapeAttr(value)}" /><button type="button" data-choose-directory="${escapeAttr(id)}" ${disabledAttr()}>选择</button></div></label>`;
-}
-
-function checkbox(label: string, id: string, checkedValue: boolean): string {
-  return `<label class="field check"><input id="${id}" type="checkbox" ${checkedValue ? "checked" : ""} /><span>${escapeHtml(label)}</span></label>`;
-}
-
-function selectField(label: string, id: string, options: Array<[string, string]>, selected = ""): string {
-  return `<label class="field"><span>${escapeHtml(label)}</span><select id="${id}">
-    ${options.map(([value, text]) => `<option value="${escapeAttr(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(text)}</option>`).join("")}
-  </select></label>`;
-}
-
-function hidden(id: string, value: string): string {
-  return `<input id="${id}" type="hidden" value="${escapeAttr(value)}" />`;
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => {
-    const entities: Record<string, string> = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    };
-    return entities[char] ?? char;
-  });
-}
-
-function escapeAttr(value: string): string {
-  return escapeHtml(value);
+  return renderPathField(label, id, value, state.busy);
 }
 
 render();

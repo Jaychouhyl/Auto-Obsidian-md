@@ -18,6 +18,7 @@ pub fn run() {
             commands::save_app_config,
             commands::open_path,
             commands::choose_directory,
+            commands::choose_backup_file,
             commands::open_url,
             commands::open_output,
             commands::backup_project,

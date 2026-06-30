@@ -33,6 +33,7 @@ class BackupTest(unittest.TestCase):
 
             self.assertTrue(result.backup_path.exists())
             self.assertIn("config.toml", result.included)
+            self.assertIn("backup-manifest.json", result.included)
             self.assertIn("links.txt", result.included)
             self.assertIn("data/queue.sqlite", result.included)
             self.assertIn("accounts/profiles/douyin.json", result.included)
@@ -41,6 +42,9 @@ class BackupTest(unittest.TestCase):
             self.assertNotIn("cache/video.mp4", result.included)
             with ZipFile(result.backup_path) as archive:
                 self.assertIn("config.toml", archive.namelist())
+                manifest = json.loads(archive.read("backup-manifest.json").decode("utf-8"))
+                self.assertEqual(manifest["app"], "Auto Obsidian MD")
+                self.assertIn("Do not publish", manifest["privacy"])
 
     def test_restore_backup_overwrites_allowed_project_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

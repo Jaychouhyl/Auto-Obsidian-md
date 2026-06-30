@@ -456,6 +456,60 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
 }
 
 #[tauri::command]
+pub fn choose_backup_file(current: String) -> Result<Option<String>, String> {
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let selected = current.replace('\'', "''");
+        let script = format!(
+            r#"
+Add-Type -AssemblyName System.Windows.Forms
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Title = '选择备份文件'
+$dialog.Filter = 'Backup zip (*.zip)|*.zip|All files (*.*)|*.*'
+$dialog.CheckFileExists = $true
+$selected = '{selected}'
+if ($selected -and (Test-Path -LiteralPath $selected)) {{
+    $dialog.FileName = $selected
+}}
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
+    Write-Output $dialog.FileName
+}}
+"#
+        );
+        let output = Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-STA",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                &script,
+            ])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|error| error.to_string())?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(if stderr.is_empty() {
+                "Backup file picker failed".to_string()
+            } else {
+                stderr
+            });
+        }
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok(if path.is_empty() { None } else { Some(path) });
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = current;
+        Ok(None)
+    }
+}
+
+#[tauri::command]
 pub fn open_url(url: String) -> Result<CommandResult, String> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err("Only http/https URLs are supported.".to_string());

@@ -57,6 +57,10 @@ export async function chooseDirectory(current: string): Promise<string | null> {
   return invoke<string | null>("choose_directory", { current });
 }
 
+export async function chooseBackupFile(current: string): Promise<string | null> {
+  return invoke<string | null>("choose_backup_file", { current });
+}
+
 export async function openUrl(url: string): Promise<CommandResult> {
   return invoke<CommandResult>("open_url", { url });
 }

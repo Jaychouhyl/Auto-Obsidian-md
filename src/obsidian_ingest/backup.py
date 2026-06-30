@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -13,6 +14,7 @@ BACKUP_FILE_NAMES = (
     "douyin-config.yml",
     ".cookies.json",
 )
+BACKUP_MANIFEST_NAME = "backup-manifest.json"
 BACKUP_DIRECTORIES = ("data", "accounts")
 SKIPPED_ACCOUNT_PARTS = {
     "Cache",
@@ -61,6 +63,14 @@ def create_project_backup(config_path: Path, output_dir: Path | None = None) -> 
 
     included: list[str] = []
     with ZipFile(backup_path, "w", compression=ZIP_DEFLATED) as archive:
+        manifest = {
+            "app": "Auto Obsidian MD",
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "privacy": "This backup may contain local config, account login state, and source lists. Do not publish it.",
+            "restores": [*BACKUP_FILE_NAMES, *BACKUP_DIRECTORIES],
+        }
+        archive.writestr(BACKUP_MANIFEST_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
+        included.append(BACKUP_MANIFEST_NAME)
         for path in _iter_backup_paths(project_root):
             relative = path.relative_to(project_root).as_posix()
             archive.write(path, relative)
