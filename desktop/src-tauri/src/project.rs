@@ -24,9 +24,7 @@ pub fn backend_exe() -> Option<PathBuf> {
             }
         }
     }
-
-    let source_binaries = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries");
-    first_existing(&source_binaries, &names)
+    None
 }
 
 pub fn run_ps1() -> PathBuf {
@@ -54,13 +52,19 @@ fn workspace_dir() -> PathBuf {
         return PathBuf::from(value);
     }
 
-    if let Some(root) = installed_project_root() {
-        return root;
+    let source_root = repo_root();
+    if cfg!(debug_assertions) {
+        if let Some(root) = installed_project_root() {
+            return root;
+        }
+
+        if source_root.join("config.toml").is_file() {
+            return source_root;
+        }
     }
 
-    let source_root = repo_root();
-    if source_root.join("config.toml").is_file() {
-        return source_root;
+    if let Some(root) = portable_workspace_root() {
+        return root;
     }
 
     if let Some(value) = env::var_os("LOCALAPPDATA") {
@@ -84,6 +88,16 @@ fn installed_project_root() -> Option<PathBuf> {
         if ancestor.join("config.toml").is_file() && ancestor.join("desktop").is_dir() {
             return Some(ancestor.to_path_buf());
         }
+    }
+    None
+}
+
+fn portable_workspace_root() -> Option<PathBuf> {
+    let current_exe = env::current_exe().ok()?;
+    let app_dir = current_exe.parent()?;
+    let workspace = app_dir.join("workspace");
+    if workspace.is_dir() {
+        return Some(workspace);
     }
     None
 }
@@ -124,7 +138,7 @@ fn default_config(root: &Path) -> String {
     let cache_dir = root.join("cache").to_string_lossy().replace('\\', "\\\\");
     let vault_path = root.join("vault").to_string_lossy().replace('\\', "\\\\");
     format!(
-        "[paths]\nqueue_db = \"{}\"\ncache_dir = \"{}\"\n\n[obsidian]\nmode = \"local\"\nvault_path = \"{}\"\nfolder = \"Inbox/Learning Inbox\"\nrest_base_url = \"http://127.0.0.1:27123\"\nrest_api_key = \"\"\n\n[tools]\nyt_dlp = \"yt-dlp\"\nffmpeg = \"ffmpeg\"\ndouyin_downloader = \"douyin-dl\"\ndouyin_config = \"\"\nwhisper = \"whisper\"\nfunasr = \"funasr\"\n\n[llm]\nenabled = false\nprovider = \"openai-compatible\"\nbase_url = \"https://api.deepseek.com/v1\"\napi_key = \"\"\nmodel = \"deepseek-chat\"\nlanguage = \"zh-CN\"\n\n[routing]\nenabled = true\nfallback_folder = \"Inbox/Learning Inbox\"\nallowed_folders = [\n    \"AI学习\",\n    \"考研资料汇总\",\n    \"炒股与量化学习\",\n    \"研后/英语学习\",\n    \"工作\",\n    \"Life\",\n    \"Inbox/Learning Inbox\",\n]\n",
+        "[paths]\nqueue_db = \"{}\"\ncache_dir = \"{}\"\n\n[obsidian]\nmode = \"local\"\nvault_path = \"{}\"\nfolder = \"Inbox/Learning Inbox\"\nrest_base_url = \"http://127.0.0.1:27123\"\nrest_api_key = \"\"\n\n[tools]\nyt_dlp = \"yt-dlp\"\nffmpeg = \"ffmpeg\"\ndouyin_downloader = \"douyin-dl\"\ndouyin_config = \"\"\nwhisper = \"whisper\"\nfunasr = \"funasr\"\nocr = \"builtin\"\n\n[llm]\nenabled = false\nprovider = \"openai-compatible\"\nbase_url = \"https://api.deepseek.com/v1\"\napi_key = \"\"\nmodel = \"deepseek-chat\"\nlanguage = \"zh-CN\"\n\n[outputs]\nformats = [\"markdown\"]\nhtml_dir = \"exports/html\"\ncsv_path = \"exports/notes-index.csv\"\nnotion_token = \"\"\nnotion_database_id = \"\"\nnotion_title_property = \"Name\"\nnotion_api_base = \"https://api.notion.com/v1\"\n\n[prompt]\nactive_template = \"learning\"\ncustom_instruction = \"\"\n\n[note_template]\nactive_template = \"study_note\"\ninclude_transcript = true\ninclude_source_notes = true\nattribution_name = \"小黄狗\"\ncustom_structure = \"\"\n\n[routing]\nenabled = true\nfallback_folder = \"Inbox/Learning Inbox\"\nallowed_folders = [\n    \"AI学习\",\n    \"考研资料汇总\",\n    \"炒股与量化学习\",\n    \"研后/英语学习\",\n    \"工作\",\n    \"Life\",\n    \"Inbox/Learning Inbox\",\n]\n",
         queue_db, cache_dir, vault_path
     )
 }

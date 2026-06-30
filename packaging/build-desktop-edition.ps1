@@ -129,8 +129,21 @@ try {
 
     $AppTarget = Join-Path $OutputDir ([string]$EditionConfig.AppFile)
     $InstallerTarget = Join-Path $OutputDir ([string]$EditionConfig.InstallerFile)
+    $SidecarSource = Join-Path $TauriRoot "binaries\obsidian-ingest-backend-x86_64-pc-windows-msvc.exe"
+    $SidecarTarget = Join-Path $OutputDir "obsidian-ingest-backend-x86_64-pc-windows-msvc.exe"
+    $WorkspaceTarget = Join-Path $OutputDir "workspace"
     Copy-Item -LiteralPath $BuiltExe -Destination $AppTarget -Force
     Copy-Item -LiteralPath $BuiltInstaller.FullName -Destination $InstallerTarget -Force
+    if (-not (Test-Path -LiteralPath $SidecarSource)) {
+        throw "Sidecar executable was not found: $SidecarSource"
+    }
+    Copy-Item -LiteralPath $SidecarSource -Destination $SidecarTarget -Force
+    New-Item -ItemType Directory -Force -Path $WorkspaceTarget | Out-Null
+    Set-Content -LiteralPath (Join-Path $WorkspaceTarget "README.txt") -Encoding UTF8 -Value @(
+        "Portable workspace for this app copy.",
+        "Config, queue data, cache, and account sessions are created here after first launch.",
+        "This folder is intentionally empty in a fresh package."
+    )
 
     if ($Sign) {
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "sign-windows.ps1") -Path $AppTarget

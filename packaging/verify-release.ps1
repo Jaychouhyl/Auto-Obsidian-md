@@ -28,10 +28,16 @@ $CommunityLabel = Join-Chars @(0x5F00, 0x6E90, 0x5B8C, 0x6574, 0x7248)
 $PersonalLabel = Join-Chars @(0x4E2A, 0x4EBA, 0x7248)
 $CommercialApp = Join-Path $CommercialDir "Knowledge Studio $CommercialLabel.exe"
 $CommercialInstaller = Join-Path $CommercialDir "Knowledge Studio ${CommercialLabel}_${Version}_x64-setup.exe"
+$CommercialPortableSidecar = Join-Path $CommercialDir "obsidian-ingest-backend-x86_64-pc-windows-msvc.exe"
+$CommercialWorkspace = Join-Path $CommercialDir "workspace"
 $PersonalApp = Join-Path $PersonalDir "Knowledge Studio $PersonalLabel.exe"
 $PersonalInstaller = Join-Path $PersonalDir "Knowledge Studio ${PersonalLabel}_${Version}_x64-setup.exe"
+$PersonalPortableSidecar = Join-Path $PersonalDir "obsidian-ingest-backend-x86_64-pc-windows-msvc.exe"
+$PersonalWorkspace = Join-Path $PersonalDir "workspace"
 $CommunityApp = Join-Path $CommunityDir "Ingest Studio $CommunityLabel.exe"
 $CommunityInstaller = Join-Path $CommunityDir "Ingest Studio ${CommunityLabel}_${Version}_x64-setup.exe"
+$CommunityPortableSidecar = Join-Path $CommunityDir "obsidian-ingest-backend-x86_64-pc-windows-msvc.exe"
+$CommunityWorkspace = Join-Path $CommunityDir "workspace"
 
 $Checks = @()
 function Add-Check {
@@ -48,10 +54,16 @@ Add-Check "personal_dir" (Test-Path -LiteralPath $PersonalDir) $PersonalDir
 Add-Check "community_dir" (Test-Path -LiteralPath $CommunityDir) $CommunityDir
 Add-Check "commercial_app" (Test-Path -LiteralPath $CommercialApp) $CommercialApp
 Add-Check "commercial_installer" (Test-Path -LiteralPath $CommercialInstaller) $CommercialInstaller
+Add-Check "commercial_portable_sidecar" (Test-Path -LiteralPath $CommercialPortableSidecar) $CommercialPortableSidecar
+Add-Check "commercial_portable_workspace" (Test-Path -LiteralPath $CommercialWorkspace) $CommercialWorkspace
 Add-Check "personal_app" (Test-Path -LiteralPath $PersonalApp) $PersonalApp
 Add-Check "personal_installer" (Test-Path -LiteralPath $PersonalInstaller) $PersonalInstaller
+Add-Check "personal_portable_sidecar" (Test-Path -LiteralPath $PersonalPortableSidecar) $PersonalPortableSidecar
+Add-Check "personal_portable_workspace" (Test-Path -LiteralPath $PersonalWorkspace) $PersonalWorkspace
 Add-Check "community_app" (Test-Path -LiteralPath $CommunityApp) $CommunityApp
 Add-Check "community_installer" (Test-Path -LiteralPath $CommunityInstaller) $CommunityInstaller
+Add-Check "community_portable_sidecar" (Test-Path -LiteralPath $CommunityPortableSidecar) $CommunityPortableSidecar
+Add-Check "community_portable_workspace" (Test-Path -LiteralPath $CommunityWorkspace) $CommunityWorkspace
 Add-Check "sidecar" (Test-Path -LiteralPath $Sidecar) $Sidecar
 
 if (Test-Path -LiteralPath $Sidecar) {
