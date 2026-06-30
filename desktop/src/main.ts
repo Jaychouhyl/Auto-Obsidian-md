@@ -12,6 +12,7 @@ import {
   collectDouyin,
   confirmAccountLogin,
   deleteAccount,
+  exportDiagnostics,
   getAccounts,
   getDependencies,
   getQueue,
@@ -491,6 +492,11 @@ async function handleRestoreProject(): Promise<void> {
   if (!window.confirm("恢复会覆盖当前配置、队列和账号资料。确认继续？")) return;
   await runAction("恢复备份", () => restoreProject(backupFile));
   await refresh();
+}
+
+async function handleExportDiagnostics(): Promise<void> {
+  await runAction("导出诊断包", exportDiagnostics);
+  await reloadData();
 }
 
 async function handleDoctorJson(): Promise<void> {
@@ -1444,6 +1450,10 @@ function renderSourcesView(): string {
         <button id="save-sources" ${disabledAttr()}>保存来源</button>
       </div>
       ${renderAccountSummary(["douyin", "bilibili", "youtube", "tiktok", "zhihu", "xiaohongshu", "wechat"])}
+      <div class="hint-panel">
+        <b>平台来源说明</b>
+        <p>抖音、B站、YouTube、TikTok 等平台导入依赖当前账号登录态和平台规则；遇到验证码、风控、接口变化时可能少量返回或失败。建议先小批量导入，普通网页、RSS、本地文件不受平台账号影响。</p>
+      </div>
       ${renderSourceConnectorGrid()}
       ${renderSourcePluginManager()}
       <div class="split">
@@ -1825,6 +1835,7 @@ function renderLogsView(): string {
         </div>
         <div class="toolbar">
           <button id="doctor-json" ${disabledAttr()}>重新检查</button>
+          <button id="export-diagnostics" ${disabledAttr()}>导出诊断包</button>
           <button data-open-output="project" ${disabledAttr()}>打开项目目录</button>
         </div>
       </div>
@@ -1843,6 +1854,7 @@ function renderLogsView(): string {
           </div>
         </div>
         <p class="muted">普通使用先看上面的处理建议；只有反复失败时，再把这些文件发给维护者排查。</p>
+        <p class="muted">诊断包只保存在本机，会脱敏常见 Key/Token，不包含账号浏览器缓存；分享前仍建议自己检查一遍。</p>
         ${rows || '<p class="muted">暂无日志文件。</p>'}
       </section>
       ${renderMessageArea()}
@@ -2057,7 +2069,10 @@ function renderSettingsView(): string {
             <span class="eyebrow">Install experience</span>
             <h2>软件级安装体验</h2>
           </div>
-          <button id="write-launcher" ${disabledAttr()}>生成启动器</button>
+          <div class="row-actions">
+            <button id="write-launcher" ${disabledAttr()}>生成启动器</button>
+            <button id="export-diagnostics" ${disabledAttr()}>导出诊断包</button>
+          </div>
         </div>
         <div class="installer-steps">
           <span>当前版本：${escapeHtml(state.appVersion || "未知")}</span>
@@ -2065,6 +2080,7 @@ function renderSettingsView(): string {
           <span>桌面快捷方式：启动器和安装包均支持</span>
           <span>开始菜单/卸载：安装包提供</span>
           <span>首次使用：引导页完成输出目录、LLM、依赖、账号</span>
+          <span>诊断支持：本地导出脱敏诊断包，不自动上传</span>
           <span>版本策略：${escapeHtml(editionVersionStrategy())}</span>
         </div>
       </section>
@@ -2335,6 +2351,7 @@ function bindEvents(): void {
   document.querySelector<HTMLButtonElement>("#choose-backup-file")?.addEventListener("click", () => void handleChooseBackupFile());
   document.querySelector<HTMLButtonElement>("#restore-project")?.addEventListener("click", () => void handleRestoreProject());
   document.querySelector<HTMLButtonElement>("#doctor-json")?.addEventListener("click", () => void handleDoctorJson());
+  document.querySelector<HTMLButtonElement>("#export-diagnostics")?.addEventListener("click", () => void handleExportDiagnostics());
   document.querySelector<HTMLButtonElement>("#install-dependencies")?.addEventListener("click", () => void handleInstallDependencies());
   document.querySelector<HTMLButtonElement>("#doctor")?.addEventListener("click", () => runAction("doctor", runDoctor));
   document.querySelector<HTMLButtonElement>("#run-douyin")?.addEventListener("click", () => void handleDouyin());

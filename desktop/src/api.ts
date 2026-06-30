@@ -77,6 +77,10 @@ export async function restoreProject(backupFile: string): Promise<CommandResult>
   return invoke<CommandResult>("restore_project", { backupFile });
 }
 
+export async function exportDiagnostics(): Promise<CommandResult> {
+  return invoke<CommandResult>("export_diagnostics");
+}
+
 export async function getSourceFiles(): Promise<SourceFiles> {
   return invoke<SourceFiles>("get_source_files");
 }

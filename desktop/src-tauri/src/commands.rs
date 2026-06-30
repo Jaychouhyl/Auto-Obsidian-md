@@ -624,6 +624,16 @@ pub fn restore_project(backup_file: String) -> Result<CommandResult, String> {
 }
 
 #[tauri::command]
+pub fn export_diagnostics() -> Result<CommandResult, String> {
+    run_ingest(&[
+        "diagnostics".into(),
+        "--json".into(),
+        "--config".into(),
+        config_arg(),
+    ])
+}
+
+#[tauri::command]
 pub fn get_source_files() -> Result<SourceFiles, String> {
     Ok(SourceFiles {
         links: fs::read_to_string(links_txt()).unwrap_or_default(),

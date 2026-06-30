@@ -79,6 +79,14 @@ cd <项目目录>
 .\run.ps1 backup --json --config .\config.toml
 ```
 
+## 用户文档
+
+- [快速开始](docs/user/快速开始.md)
+- [常见问题](docs/user/常见问题.md)
+- [隐私与数据说明](docs/user/隐私与数据说明.md)
+- [平台能力边界](docs/user/平台能力边界.md)
+- [本地稳定性验收](docs/user/本地稳定性验收.md)
+
 ---
 
 自动化写的

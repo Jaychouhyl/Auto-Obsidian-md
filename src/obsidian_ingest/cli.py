@@ -21,6 +21,7 @@ from .dependencies import (
     format_install_result,
     install_managed_dependencies,
 )
+from .diagnostics import create_diagnostic_package
 from .doctor import format_doctor, run_doctor
 from .json_output import queue_item_to_dict, status_payload
 from .knowledge import build_knowledge_maintenance
@@ -75,6 +76,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_backup(args)
     if args.command == "restore":
         return _cmd_restore(args)
+    if args.command == "diagnostics":
+        return _cmd_diagnostics(args)
     parser.print_help()
     return 1
 
@@ -224,6 +227,11 @@ def build_parser() -> argparse.ArgumentParser:
     restore.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
     restore.add_argument("--yes", action="store_true", help="Confirm overwrite of local project files")
     restore.add_argument("--json", action="store_true")
+
+    diagnostics = subparsers.add_parser("diagnostics", help="Create a redacted local diagnostic package")
+    diagnostics.add_argument("--config", default=str(DEFAULT_PROJECT_DIR / "config.toml"))
+    diagnostics.add_argument("--output-dir", default="")
+    diagnostics.add_argument("--json", action="store_true")
     return parser
 
 
@@ -676,6 +684,23 @@ def _cmd_restore(args: argparse.Namespace) -> int:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         print(f"Restored {len(result.restored)} file(s) from {result.backup_path}")
+    return 0
+
+
+def _cmd_diagnostics(args: argparse.Namespace) -> int:
+    result = create_diagnostic_package(
+        Path(args.config),
+        Path(args.output_dir) if args.output_dir else None,
+    )
+    payload = {
+        "status": "done",
+        "package_path": str(result.package_path),
+        "included": result.included,
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Wrote diagnostics package: {result.package_path}")
     return 0
 
 

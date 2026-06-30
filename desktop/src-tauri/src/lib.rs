@@ -23,6 +23,7 @@ pub fn run() {
             commands::open_output,
             commands::backup_project,
             commands::restore_project,
+            commands::export_diagnostics,
             commands::get_source_files,
             commands::save_source_files,
             commands::collect_douyin,
